@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.4 — 2026-09-30
+
+Live 429/UI-timeout fix based on a real browser failure capture.
+
+- Shortens the first inline conversation-detail retries to a UI-safe rescue window instead of holding ChatGPT's fetch promise for 12–60+ seconds.
+- Caps soft preflight cooldown waits at 1.2 seconds, including shared conversation-family cooldowns, so one rate-limited chat cannot stall another chat long enough to trip the frontend error state.
+- Keeps explicit server `Retry-After` as a hard per-conversation lower bound and persists it separately from local soft cooldowns.
+- Stops propagating one conversation's hard `Retry-After` deadline to unrelated conversations.
+- Uses bounded symmetric jitter around local backoff instead of positive-only jitter.
+- Limits one conversation-detail UI request to three network attempts before returning the final 429, reducing both retry storms and frontend timeout exposure.
+- Adds anonymized deterministic `rateHash` diagnostics so browser-level 429s can be correlated with Guard backoff events without storing conversation IDs.
+- Adds regression coverage for a transient two-429 recovery under 9 seconds and a capped cross-conversation cooldown.
+
 ## 0.8.3 — 2026-09-30
 
 Rate-limit de-synchronization hardening.
