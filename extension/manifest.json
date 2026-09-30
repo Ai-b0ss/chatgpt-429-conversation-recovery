@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT 429 Guard",
+  "version": "0.8.0",
+  "description": "Reduces duplicate ChatGPT conversation retries after HTTP 429 and respects server backoff. Unofficial.",
+  "permissions": ["storage", "webRequest"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["guard.js", "control.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+  "host_permissions": ["https://chatgpt.com/*"],
+  "action": {
+    "default_title": "ChatGPT 429 Guard",
+    "default_popup": "popup.html"
+  }
+}

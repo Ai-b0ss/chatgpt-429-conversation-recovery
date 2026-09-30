@@ -1,0 +1,46 @@
+name: ChatGPT 429 / Too Many Requests
+description: Report a 429 conversation-loading or stream-recovery problem
+title: "[429] "
+labels: ["429", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste cookies, authorization headers, private conversation URLs, account tokens, or conversation text.
+  - type: textarea
+    id: symptom
+    attributes:
+      label: What happened?
+      description: Copy the exact visible ChatGPT error and describe what you were doing.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Safe diagnostics
+      description: Paste the output from "Copy safe diagnostics" in the extension popup.
+      render: json
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: "Chrome 154.0..."
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11 / macOS / Linux"
+    validations:
+      required: true
+  - type: dropdown
+    id: disabled
+    attributes:
+      label: Does disabling the extension change the problem?
+      options:
+        - "Not tested"
+        - "Yes"
+        - "No"
+    validations:
+      required: true
