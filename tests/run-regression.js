@@ -7,7 +7,8 @@ const {chromium}=require('playwright');
 const repo=path.resolve(__dirname,'..');
 const profile=path.join(os.tmpdir(),'chatgpt-429-guard-regression-profile');
 const ext=path.join(os.tmpdir(),'chatgpt-429-guard-regression-extension');
-const base='http://127.0.0.1:9342';
+const port=9400+(process.pid%400);
+const base='http://127.0.0.1:'+port;
 const out=path.join(__dirname,'regression-result.json');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
@@ -27,15 +28,24 @@ background=background.replaceAll(
 fs.writeFileSync(backgroundPath,background);
 
 const python=process.platform==='win32'?'python':'python3';
-const server=spawn(python,[path.join(__dirname,'server.py')],{stdio:'ignore'});
+const server=spawn(python,[path.join(__dirname,'server.py')],{
+  stdio:'ignore',
+  env:{...process.env,PORT:String(port)}
+});
 async function waitServer(){
-  for(let i=0;i<50;i++){
-    try{ if((await fetch(base+'/')).ok) return; }catch{}
+  for(let i=0;i<120;i++){
+    try{
+      const response=await fetch(base+'/',{
+        signal:AbortSignal.timeout(500)
+      });
+      if(response.ok) return;
+    }catch{}
     await sleep(100);
   }
   throw new Error('test_server_not_ready');
 }
 process.on('exit',()=>{try{server.kill();}catch{}});
+let context=null;
 
 async function reset(request){
   await request.get(base+'/reset');
@@ -65,7 +75,7 @@ async function clearGuardCooldowns(page){
 (async()=>{
   await waitServer();
   fs.rmSync(profile,{recursive:true,force:true});
-  const context=await chromium.launchPersistentContext(profile,{
+  context=await chromium.launchPersistentContext(profile,{
     headless:false,
     args:[
       '--disable-extensions-except='+ext,
@@ -176,7 +186,21 @@ async function clearGuardCooldowns(page){
   t0=Date.now();
   const family=await page.evaluate(async base=>{
     const first=fetch(base+'/backend-api/conversations/global-a').then(r=>r.status);
-    await new Promise(r=>setTimeout(r,250));
+    const deadline=Date.now()+3000;
+    while(Date.now()<deadline){
+      let active=false;
+      for(let i=0;i<localStorage.length;i++){
+        const key=localStorage.key(i);
+        if(!key||!key.startsWith('chatgpt-429-guard:cooldown:')) continue;
+        const until=Number(localStorage.getItem(key));
+        if(Number.isFinite(until)&&until>Date.now()){
+          active=true;
+          break;
+        }
+      }
+      if(active) break;
+      await new Promise(r=>setTimeout(r,20));
+    }
     const second=fetch(base+'/backend-api/conversations/global-b').then(r=>r.status);
     return await Promise.all([first,second]);
   },base);
@@ -208,10 +232,19 @@ async function clearGuardCooldowns(page){
     await resume404.text();
     const wsObserved=await new Promise(resolve=>{
       const ws=new WebSocket(base.replace(/^http/,'ws')+'/ws');
-      let seen=false;
-      const timer=setTimeout(()=>{try{ws.close();}catch{} resolve(false);},1000);
-      ws.addEventListener('message',()=>{seen=true;});
-      ws.addEventListener('close',()=>{clearTimeout(timer);resolve(seen);},{once:true});
+      const timer=setTimeout(()=>{
+        try{ws.close();}catch{}
+        resolve(false);
+      },1500);
+      ws.addEventListener('message',()=>{
+        clearTimeout(timer);
+        try{ws.close();}catch{}
+        resolve(true);
+      },{once:true});
+      ws.addEventListener('error',()=>{
+        clearTimeout(timer);
+        resolve(false);
+      },{once:true});
     });
     await new Promise(r=>setTimeout(r,100));
     const resumeSuccess=await fetch(base+'/backend-api/f/conversation/resume',{
@@ -285,6 +318,51 @@ async function clearGuardCooldowns(page){
     offsets:recoveryCalls.map(c=>c.offset),
     probes:recoveryCalls.map(c=>c.probe),
     contexts:recoveryCalls.map(c=>c.resume_context)
+  });
+
+  await reset(context.request);
+  t0=Date.now();
+  const absoluteOffsetRecovery=await page.evaluate(async base=>{
+    const before=__CGUARD_STREAM_STATUS__().metrics;
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-absolute/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,50));
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        conversation_id:'resume-absolute',
+        offset:1
+      })
+    });
+    const body=await response.text();
+    await new Promise(r=>setTimeout(r,100));
+    const after=__CGUARD_STREAM_STATUS__();
+    return {
+      streamStatus,
+      status:response.status,
+      hasDone:body.includes('[DONE]'),
+      successDelta:
+        (after.metrics.recoverySuccess||0)-
+        (before.recoverySuccess||0),
+      observer:after
+    };
+  },base);
+  st=await state(context.request);
+  const absoluteCalls=st.calls.filter(
+    c=>c.path==='/backend-api/f/conversation/resume'
+  );
+  results.tests.push({
+    name:'active_resume_absolute_offsets',
+    ...absoluteOffsetRecovery,
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts[
+      'GET /backend-api/conversation/resume-absolute/stream_status'
+    ]||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0,
+    offsets:absoluteCalls.map(c=>c.offset)
   });
 
   await reset(context.request);
@@ -528,6 +606,102 @@ async function clearGuardCooldowns(page){
 
   await reset(context.request);
   t0=Date.now();
+  const recoveryPage2=await context.newPage();
+  await recoveryPage2.goto(base+'/',{
+    waitUntil:'domcontentloaded',
+    timeout:30000
+  });
+  await recoveryPage2.waitForFunction(
+    ()=>typeof __CGUARD_STREAM_STATUS__==='function',
+    {timeout:10000}
+  );
+  const crossTabRecovery=await Promise.all([
+    page.evaluate(async base=>{
+      __CGUARD_RESUME_RECOVERY_ENABLE__();
+      const before=__CGUARD_STREAM_STATUS__().metrics;
+      await fetch(
+        base+'/backend-api/conversation/resume-cross-tab/stream_status'
+      );
+      await new Promise(r=>setTimeout(r,50));
+      const response=await fetch(
+        base+'/backend-api/f/conversation/resume',
+        {
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify({
+            conversation_id:'resume-cross-tab',
+            offset:0
+          })
+        }
+      );
+      await response.text();
+      const after=__CGUARD_STREAM_STATUS__();
+      return {
+        status:response.status,
+        skippedCrossTabDelta:
+          (after.metrics.recoverySkippedCrossTab||0)-
+          (before.recoverySkippedCrossTab||0),
+        exhaustedDelta:
+          (after.metrics.recoveryExhausted||0)-
+          (before.recoveryExhausted||0)
+      };
+    },base),
+    recoveryPage2.evaluate(async base=>{
+      __CGUARD_RESUME_RECOVERY_ENABLE__();
+      const before=__CGUARD_STREAM_STATUS__().metrics;
+      await fetch(
+        base+'/backend-api/conversation/resume-cross-tab/stream_status'
+      );
+      await new Promise(r=>setTimeout(r,50));
+      const response=await fetch(
+        base+'/backend-api/f/conversation/resume',
+        {
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify({
+            conversation_id:'resume-cross-tab',
+            offset:0
+          })
+        }
+      );
+      await response.text();
+      const after=__CGUARD_STREAM_STATUS__();
+      return {
+        status:response.status,
+        skippedCrossTabDelta:
+          (after.metrics.recoverySkippedCrossTab||0)-
+          (before.recoverySkippedCrossTab||0),
+        exhaustedDelta:
+          (after.metrics.recoveryExhausted||0)-
+          (before.recoveryExhausted||0)
+      };
+    },base)
+  ]);
+  await recoveryPage2.close();
+  st=await state(context.request);
+  const crossTabCalls=st.calls.filter(
+    c=>c.path==='/backend-api/f/conversation/resume'
+  );
+  results.tests.push({
+    name:'active_resume_cross_tab_lock',
+    statuses:crossTabRecovery.map(x=>x.status),
+    skippedCrossTabDelta:crossTabRecovery.reduce(
+      (sum,x)=>sum+x.skippedCrossTabDelta,0
+    ),
+    exhaustedDelta:crossTabRecovery.reduce(
+      (sum,x)=>sum+x.exhaustedDelta,0
+    ),
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:
+      st.counts[
+        'GET /backend-api/conversation/resume-cross-tab/stream_status'
+      ]||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0,
+    offsets:crossTabCalls.map(c=>c.offset)
+  });
+
+  await reset(context.request);
+  t0=Date.now();
   const noStreamingRecovery=await page.evaluate(async base=>{
     const before=__CGUARD_STREAM_STATUS__().metrics.recoverySkippedNoStreaming||0;
     const response=await fetch(base+'/backend-api/f/conversation/resume',{
@@ -755,6 +929,15 @@ async function clearGuardCooldowns(page){
       JSON.stringify(byName.active_resume_offset_recovery.contexts)==='["preserve-me","preserve-me"]' &&
       (byName.active_resume_offset_recovery.observer?.metrics?.recoverySuccess||0)>=1 &&
       (byName.active_resume_offset_recovery.observer?.metrics?.recoveryAttempts||0)>=1,
+    activeResumeAbsoluteOffsets:
+      byName.active_resume_absolute_offsets.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_absolute_offsets.status===200 &&
+      byName.active_resume_absolute_offsets.hasDone===true &&
+      byName.active_resume_absolute_offsets.successDelta===1 &&
+      byName.active_resume_absolute_offsets.streamStatusCalls===1 &&
+      byName.active_resume_absolute_offsets.resumeCalls===2 &&
+      JSON.stringify(byName.active_resume_absolute_offsets.offsets)==='[1,0]' &&
+      (byName.active_resume_absolute_offsets.observer?.metrics?.stockResumeOffsets?.['1']||0)>=1,
     activeResumeHandoff:
       byName.active_resume_accepts_handoff_sse.streamStatus==='IS_STREAMING' &&
       byName.active_resume_accepts_handoff_sse.status===200 &&
@@ -797,6 +980,14 @@ async function clearGuardCooldowns(page){
       byName.active_resume_same_page_concurrency.streamStatusCalls===1 &&
       byName.active_resume_same_page_concurrency.resumeCalls===4 &&
       JSON.stringify([...byName.active_resume_same_page_concurrency.offsets].sort((a,b)=>a-b))==='[0,0,1,2]',
+    activeResumeCrossTabLock:
+      byName.active_resume_cross_tab_lock.statuses.length===2 &&
+      byName.active_resume_cross_tab_lock.statuses.every(x=>x===404) &&
+      byName.active_resume_cross_tab_lock.skippedCrossTabDelta===1 &&
+      byName.active_resume_cross_tab_lock.exhaustedDelta===1 &&
+      byName.active_resume_cross_tab_lock.streamStatusCalls===2 &&
+      byName.active_resume_cross_tab_lock.resumeCalls===4 &&
+      JSON.stringify([...byName.active_resume_cross_tab_lock.offsets].sort((a,b)=>a-b))==='[0,0,1,2]',
     activeResumeRequiresStreaming:
       byName.active_resume_requires_streaming_evidence.status===404 &&
       byName.active_resume_requires_streaming_evidence.streamStatusCalls===0 &&
@@ -843,9 +1034,14 @@ async function clearGuardCooldowns(page){
   fs.writeFileSync(out,JSON.stringify(results,null,2));
   console.log(JSON.stringify(results,null,2));
   await context.close();
+  context=null;
   try{server.kill();}catch{}
   if(!results.pass) process.exit(2);
-})().catch(e=>{
+})().catch(async e=>{
+  if(context){
+    try{await context.close();}catch{}
+    context=null;
+  }
   try{server.kill();}catch{}
   console.error(e.stack||String(e));
   process.exit(1);
