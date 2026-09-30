@@ -19,6 +19,7 @@
   const stateTtlMs = 2 * 60 * 1000;
   const recoveryGraceMs = 1200;
   const recoveryDetailExtensionMs = 4800;
+  const recoveryPostDetailGraceMs = 800;
   const recoveryRetryDelayMs = 150;
   const recoveryOffsetCandidates = [0, 1, 2];
   const recoveryMaxAttempts = recoveryOffsetCandidates.length;
@@ -39,10 +40,11 @@
     recoveryAttempts: 0,
     recoverySuccess: 0,
     recoverySuppressedByWebsocket: 0,
-    recoverySuppressedByDetail: 0,
     stockDetailObserved: 0,
     stockDetailSuccess: 0,
     recoveryDetailWaits: 0,
+    recoveryDetailSuccessObserved: 0,
+    recoveryDetailFailureObserved: 0,
     recoverySkippedNoStreaming: 0,
     recoverySkippedUnsupported: 0,
     recoverySkippedConcurrent: 0,
@@ -206,6 +208,7 @@
     ms,
     signal
   ) => {
+    const timeout = Symbol("timeout");
     const never = new Promise(() => {});
     return await Promise.race([
       waitForConversationCompletion(
@@ -219,9 +222,13 @@
         detailSequenceAtStart,
         ms,
         signal
-      ).then(value => value === "success" ? "stock-detail-success" : never),
-      sleep(ms, signal).then(() => null)
-    ]);
+      ).then(value => {
+        if (value === "success") return "stock-detail-success";
+        if (value === "failed") return "stock-detail-failed";
+        return never;
+      }),
+      sleep(ms, signal).then(() => timeout)
+    ]).then(value => value === timeout ? null : value);
   };
 
   const beginDetailRequest = conversationId => {
@@ -633,14 +640,31 @@
         );
       }
 
-      if (naturalSignal) {
-        if (naturalSignal === "provider-complete") {
-          metrics.recoverySuppressedByWebsocket++;
-        } else if (naturalSignal === "stock-detail-success") {
-          metrics.recoverySuppressedByDetail++;
-        }
+      if (naturalSignal === "provider-complete") {
+        metrics.recoverySuppressedByWebsocket++;
         emit("resume-recovery-suppressed", { reason: naturalSignal });
         return null;
+      }
+
+      if (naturalSignal === "stock-detail-success") {
+        metrics.recoveryDetailSuccessObserved++;
+        emit("resume-recovery-detail-observed", { outcome: "success" });
+        const completedAfterDetail = await waitForConversationCompletion(
+          conversationId,
+          completionSequenceAtStart,
+          recoveryPostDetailGraceMs,
+          retryRequest.signal
+        );
+        if (completedAfterDetail) {
+          metrics.recoverySuppressedByWebsocket++;
+          emit("resume-recovery-suppressed", {
+            reason: "provider-complete-after-detail"
+          });
+          return null;
+        }
+      } else if (naturalSignal === "stock-detail-failed") {
+        metrics.recoveryDetailFailureObserved++;
+        emit("resume-recovery-detail-observed", { outcome: "failed" });
       }
 
       const offsets = recoveryOffsetCandidates
