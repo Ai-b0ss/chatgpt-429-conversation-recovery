@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>ChatGPT 429 Guard</title>
+<style>
+body{font:14px system-ui;width:350px;padding:14px;color:#222;background:#fff}
+h1{font-size:18px;margin:0 0 10px}p{margin:8px 0}button{padding:8px;margin:4px 4px 4px 0}
+pre{white-space:pre-wrap;font:12px system-ui;background:#f6f6f6;padding:8px;border-radius:6px}
+#status{font-weight:650}.muted{font-size:12px;color:#666}
+</style>
+<h1>ChatGPT 429 Guard <span id="version"></span></h1>
+<p id="status">Checking…</p>
+<button id="toggle" disabled>Disable protection</button>
+<button id="refresh">Refresh</button>
+<button id="copy">Copy safe diagnostics</button>
+<pre id="metrics"></pre>
+<pre id="telemetry"></pre>
+<p class="muted">Only ChatGPT conversation-read traffic is delayed or deduplicated. Message sending, uploads and model requests are not modified.</p>
+<p class="muted">Diagnostics stay in your browser and exclude conversation text, cookies, full URLs and conversation IDs.</p>
+<script src="popup.js"></script>
+</html>
