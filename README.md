@@ -4,9 +4,9 @@ Unofficial browser-side recovery tools for ChatGPT conversation and streaming fa
 
 Common search/UI wording for the problem includes **“This chat is unavailable”**, **“Chat unavailable”**, **“stream interrupted”**, **HTTP 429 / Too Many Requests**, and the Russian ChatGPT message **«Этот чат недоступен»**.
 
-**Current stable variant:** **ChatGPT 429 Guard v0.8.4** — targets the 429-backed form of the “This chat is unavailable” / «Этот чат недоступен» failure. It coalesces duplicate conversation reads, performs short UI-safe rescue retries after transient HTTP 429 / “Too Many Requests”, and keeps explicit server `Retry-After` delays authoritative without letting one chat impose a long local cooldown on unrelated chats.
+**Current stable variant:** **ChatGPT 429 Guard v0.9.0** — keeps the v0.8.4 conversation-read 429 protection and adds bounded recovery for a separate lost-stream failure: ChatGPT reports a fresh `IS_STREAMING`, its stock `POST /backend-api/f/conversation/resume` returns 404, and no natural completion arrives. Recovery replays only the observed stock resume request with bounded offsets, validates the returned SSE before replacing the 404, and remains covered by the same global kill switch.
 
-The same visible “chat unavailable” message can have other causes. If no 429 is present, this specific variant may not help; other recovery paths should remain separate until verified.
+The same visible “chat unavailable” message can still have other causes. v0.9.0 covers the verified conversation-read 429 path and the verified resume-404/lost-stream path; unrelated failure modes remain out of scope until separately verified.
 
 > This project does **not** bypass OpenAI rate limits. It only reduces unnecessary client-side retry traffic and respects server backoff.
 
@@ -23,8 +23,9 @@ Traffic-changing protection is intentionally narrow:
 - `GET /backend-api/conversations/{id}`
 - `GET /backend-api/conversation/{id}`
 - `GET /backend-api/conversations` (conversation list)
+- a stock `POST /backend-api/f/conversation/resume` **only after** that exact stock request returned 404 while fresh stock `IS_STREAMING` evidence exists.
 
-It does **not** modify message sending, uploads, model requests, or conversation POST writes.
+It does **not** modify message sending, uploads, model requests, new-generation POSTs, or arbitrary conversation writes. Resume recovery never invents auth material: it clones the request ChatGPT already made and changes only the bounded `offset` field.
 ## Measured behavior
 
 | Scenario | Baseline client | 429 Guard |
@@ -66,15 +67,16 @@ The extension is deliberately conservative:
 - positive `Retry-After` values are honored as seconds or HTTP dates, with a one-hour safety cap;
 - normal pre-response aborts do not create a false cooldown;
 - every deduplicated caller receives its own cloned `Response`;
-- a local kill switch can disable the guard immediately for future requests.
-
-Passive telemetry can observe related ChatGPT network failures, but the 429 variant does not change those requests.
+- lost-stream recovery requires fresh stock `IS_STREAMING` evidence, a stock resume 404, and no provider completion during the grace window;
+- resume retries are bounded to offsets 0/1/2, serialized across tabs, and validated as real ChatGPT SSE before replacing the stock 404;
+- error-only, empty/`[DONE]`-only and non-SSE recovery responses fail closed;
+- a local kill switch disables both 429 handling and resume recovery immediately for future requests.
 
 ## Project branches
 
-- `main` — project hub and current stable 429 release.
-- `429-only` — deliberately narrow branch for HTTP 429 conversation-read recovery.
-- Future recovery experiments can live in separate branches before anything is merged into the stable path.
+- `main` — current stable combined release.
+- `429-only` — deliberately narrow branch frozen to HTTP 429 conversation-read recovery.
+- recovery experiments remain on separate branches until their regression and live-canary gates pass.
 
 This separation is intentional: a fix for one ChatGPT failure mode should not silently change unrelated traffic.
 
@@ -90,7 +92,7 @@ npx playwright install chromium
 npm test
 ```
 
-The suite covers concurrency, non-target passthrough, POST passthrough, aborts, `Request` objects, `Retry-After`, the kill switch, and two-tab coordination.
+The suite covers 429 concurrency/backoff plus resume-404 recovery, stale evidence, WebSocket suppression, conversation-detail races, cross-tab locking, bounded offsets, malformed/non-SSE recovery responses, AbortSignal propagation, the kill switch, and request-context preservation.
 ## Reporting a problem
 
 Use the GitHub 429 bug-report template and include:

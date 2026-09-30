@@ -216,6 +216,10 @@ async function clearGuardCooldowns(page){
     bCalls:st.counts['GET /backend-api/conversations/global-b']||0
   });
 
+  const recoveryDefaultActive=await page.evaluate(
+    ()=>__CGUARD_STREAM_STATUS__().recoveryActive
+  );
+  await page.evaluate(()=>__CGUARD_RESUME_RECOVERY_DISABLE__());
   await reset(context.request);
   t0=Date.now();
   const streamResume=await page.evaluate(async base=>{
@@ -267,6 +271,7 @@ async function clearGuardCooldowns(page){
   st=await state(context.request);
   results.tests.push({
     name:'passive_stream_resume_observer',
+    recoveryDefaultActive,
     ...streamResume,
     elapsedMs:Date.now()-t0,
     streamStatusCalls:st.counts['GET /backend-api/conversation/resume-404/stream_status']||0,
@@ -1068,10 +1073,44 @@ async function clearGuardCooldowns(page){
     resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0
   });
 
-  await page.evaluate(()=>__CGUARD_RESUME_RECOVERY_DISABLE__());
 
   await reset(context.request);
   await page.evaluate(()=>__CGUARD_DISABLE__());
+  t0=Date.now();
+  const resumeKillSwitch=await page.evaluate(async base=>{
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-kill-switch/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,100));
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        conversation_id:'resume-kill-switch',
+        offset:0
+      })
+    });
+    const body=await response.text();
+    return {
+      streamStatus,
+      status:response.status,
+      original404Body:body.includes('resume target missing'),
+      observer:__CGUARD_STREAM_STATUS__()
+    };
+  },base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'resume_recovery_honors_guard_kill_switch',
+    ...resumeKillSwitch,
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts[
+      'GET /backend-api/conversation/resume-kill-switch/stream_status'
+    ]||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0
+  });
+
+  await reset(context.request);
   t0=Date.now();
   const disabled=await page.evaluate(async base=>(await fetch(
     base+'/backend-api/conversations/concurrent'
@@ -1123,7 +1162,8 @@ async function clearGuardCooldowns(page){
       byName.different_conversations_share_cooldown.statuses.every(x=>x===200) &&
       byName.different_conversations_share_cooldown.firstToSecondMs>=900 &&
       byName.different_conversations_share_cooldown.firstToSecondMs<2500,
-    streamObserver:byName.passive_stream_resume_observer.streamStatus==='IS_STREAMING' &&
+    streamObserver:byName.passive_stream_resume_observer.recoveryDefaultActive===true &&
+      byName.passive_stream_resume_observer.streamStatus==='IS_STREAMING' &&
       byName.passive_stream_resume_observer.resume404===404 &&
       byName.passive_stream_resume_observer.wsObserved===true &&
       byName.passive_stream_resume_observer.resumeSuccess===200 &&
@@ -1278,6 +1318,14 @@ async function clearGuardCooldowns(page){
       byName.active_resume_abort_propagation.streamStatusCalls===1 &&
       byName.active_resume_abort_propagation.resumeCalls===1 &&
       (byName.active_resume_abort_propagation.observer?.metrics?.recoveryAborted||0)>=1,
+    resumeRecoveryKillSwitch:
+      byName.resume_recovery_honors_guard_kill_switch.streamStatus==='IS_STREAMING' &&
+      byName.resume_recovery_honors_guard_kill_switch.status===404 &&
+      byName.resume_recovery_honors_guard_kill_switch.original404Body===true &&
+      byName.resume_recovery_honors_guard_kill_switch.resumeCalls===1 &&
+      byName.resume_recovery_honors_guard_kill_switch.streamStatusCalls===1 &&
+      byName.resume_recovery_honors_guard_kill_switch.observer?.recoveryEnabled===true &&
+      byName.resume_recovery_honors_guard_kill_switch.observer?.recoveryActive===false,
     killSwitch:byName.kill_switch.networkCalls===1 && byName.kill_switch.status===429,
     twoTabs:byName.two_tabs_same_conversation.networkCalls<=3 && byName.two_tabs_same_conversation.statuses.every(x=>x===200),
     networkTelemetry:(results.storage?.cguard_counts?.['network-429']||0)>=6,
