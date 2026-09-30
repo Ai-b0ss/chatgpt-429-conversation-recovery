@@ -99,6 +99,12 @@ class H(BaseHTTPRequestHandler):
                 if n<=2:
                     return self.sendb(429,'{"detail":"Too many requests"}')
                 return self.sendb(200,'{"ok":true}')
+            if ident=="resume-detail-hydrate":
+                time.sleep(2.0)
+                return self.sendb(200,json.dumps({"ok":True,"id":ident,"n":n}))
+            if ident=="resume-detail-fail":
+                time.sleep(0.35)
+                return self.sendb(500,'{"detail":"detail failed"}')
             return self.sendb(200,json.dumps({"ok":True,"id":ident,"n":n}))
         bump(path,"GET")
         return self.sendb(404,'{"error":"not found"}')
@@ -128,7 +134,8 @@ class H(BaseHTTPRequestHandler):
                 "resume-exhaust",
                 "resume-abort",
                 "resume-concurrent",
-                "resume-cross-tab"
+                "resume-cross-tab",
+                "resume-detail-hydrate"
             ):
                 return self.sendb(404,'{"detail":"resume target missing"}')
             if ident=="resume-nonstream":
@@ -146,7 +153,11 @@ class H(BaseHTTPRequestHandler):
                     'data: [DONE]\n\n'
                 )
                 return self.sendb(200,stream,ctype="text/event-stream")
-            if ident in ("resume-recover","resume-oldcomplete") and offset!=1:
+            if ident in (
+                "resume-recover",
+                "resume-oldcomplete",
+                "resume-detail-fail"
+            ) and offset!=1:
                 return self.sendb(404,'{"detail":"resume offset missing"}')
             if ident=="resume-absolute" and offset!=0:
                 return self.sendb(404,'{"detail":"resume absolute offset missing"}')
@@ -154,7 +165,8 @@ class H(BaseHTTPRequestHandler):
                 "resume-success",
                 "resume-recover",
                 "resume-oldcomplete",
-                "resume-absolute"
+                "resume-absolute",
+                "resume-detail-fail"
             ):
                 stream=(
                     'data: {"p":"","o":"add","v":{"message":{"id":"a1","author":{"role":"assistant"},'

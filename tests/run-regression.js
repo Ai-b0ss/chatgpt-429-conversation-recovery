@@ -134,7 +134,7 @@ async function clearGuardCooldowns(page){
     const p=fetch(base+'/backend-api/conversations/always-429',{signal:c.signal})
       .then(r=>({resolved:true,status:r.status}))
       .catch(e=>({resolved:false,name:e.name,message:String(e)}));
-    setTimeout(()=>c.abort('integration-abort'),100);
+    setTimeout(()=>c.abort('integration-abort'),500);
     return await p;
   },base);
   await sleep(800);
@@ -451,6 +451,120 @@ async function clearGuardCooldowns(page){
     streamStatusCalls:st.counts['GET /backend-api/conversation/resume-ws/stream_status']||0,
     resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0
   });
+  await reset(context.request);
+  t0=Date.now();
+  const detailSuppression=await page.evaluate(async base=>{
+    const before=__CGUARD_STREAM_STATUS__().metrics;
+    const detailPromise=fetch(
+      base+'/backend-api/conversations/resume-detail-hydrate'
+    ).then(r=>r.status);
+    await new Promise(r=>setTimeout(r,50));
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-detail-hydrate/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,50));
+    const started=performance.now();
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        conversation_id:'resume-detail-hydrate',
+        offset:0
+      })
+    });
+    const body=await response.text();
+    const detailStatus=await detailPromise;
+    await new Promise(r=>setTimeout(r,100));
+    const after=__CGUARD_STREAM_STATUS__();
+    return {
+      streamStatus,
+      status:response.status,
+      detailStatus,
+      elapsedMs:Math.round(performance.now()-started),
+      original404Body:body.includes('resume target missing'),
+      suppressedDetailDelta:
+        (after.metrics.recoverySuppressedByDetail||0)-
+        (before.recoverySuppressedByDetail||0),
+      detailWaitDelta:
+        (after.metrics.recoveryDetailWaits||0)-
+        (before.recoveryDetailWaits||0),
+      observer:after
+    };
+  },base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'active_resume_stock_detail_suppression',
+    ...detailSuppression,
+    totalElapsedMs:Date.now()-t0,
+    detailCalls:st.counts[
+      'GET /backend-api/conversations/resume-detail-hydrate'
+    ]||0,
+    streamStatusCalls:st.counts[
+      'GET /backend-api/conversation/resume-detail-hydrate/stream_status'
+    ]||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0
+  });
+
+  await reset(context.request);
+  t0=Date.now();
+  const detailFailureRecovery=await page.evaluate(async base=>{
+    const before=__CGUARD_STREAM_STATUS__().metrics;
+    const detailPromise=fetch(
+      base+'/backend-api/conversations/resume-detail-fail'
+    ).then(r=>r.status);
+    await new Promise(r=>setTimeout(r,50));
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-detail-fail/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,50));
+    const started=performance.now();
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        conversation_id:'resume-detail-fail',
+        offset:0
+      })
+    });
+    const body=await response.text();
+    const detailStatus=await detailPromise;
+    await new Promise(r=>setTimeout(r,100));
+    const after=__CGUARD_STREAM_STATUS__();
+    return {
+      streamStatus,
+      status:response.status,
+      detailStatus,
+      elapsedMs:Math.round(performance.now()-started),
+      hasDone:body.includes('[DONE]'),
+      successDelta:
+        (after.metrics.recoverySuccess||0)-
+        (before.recoverySuccess||0),
+      suppressedDetailDelta:
+        (after.metrics.recoverySuppressedByDetail||0)-
+        (before.recoverySuppressedByDetail||0),
+      observer:after
+    };
+  },base);
+  st=await state(context.request);
+  const detailFailureResumeCalls=st.calls.filter(
+    c=>c.path==='/backend-api/f/conversation/resume'
+  );
+  results.tests.push({
+    name:'active_resume_detail_failure_falls_back_to_retry',
+    ...detailFailureRecovery,
+    totalElapsedMs:Date.now()-t0,
+    detailCalls:st.counts[
+      'GET /backend-api/conversations/resume-detail-fail'
+    ]||0,
+    streamStatusCalls:st.counts[
+      'GET /backend-api/conversation/resume-detail-fail/stream_status'
+    ]||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0,
+    offsets:detailFailureResumeCalls.map(c=>c.offset)
+  });
+
   await reset(context.request);
   t0=Date.now();
   const completionBefore404=await page.evaluate(async base=>{
@@ -955,6 +1069,27 @@ async function clearGuardCooldowns(page){
       byName.active_resume_ws_suppression.resumeCalls===1 &&
       (byName.active_resume_ws_suppression.observer?.metrics?.recoverySuppressedByWebsocket||0)>=1 &&
       (byName.active_resume_ws_suppression.observer?.metrics?.websocketTurnComplete||0)>=2,
+    activeResumeStockDetailSuppression:
+      byName.active_resume_stock_detail_suppression.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_stock_detail_suppression.status===404 &&
+      byName.active_resume_stock_detail_suppression.detailStatus===200 &&
+      byName.active_resume_stock_detail_suppression.original404Body===true &&
+      byName.active_resume_stock_detail_suppression.suppressedDetailDelta===1 &&
+      byName.active_resume_stock_detail_suppression.detailWaitDelta===1 &&
+      byName.active_resume_stock_detail_suppression.detailCalls===1 &&
+      byName.active_resume_stock_detail_suppression.streamStatusCalls===1 &&
+      byName.active_resume_stock_detail_suppression.resumeCalls===1,
+    activeResumeDetailFailureRetries:
+      byName.active_resume_detail_failure_falls_back_to_retry.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_detail_failure_falls_back_to_retry.status===200 &&
+      byName.active_resume_detail_failure_falls_back_to_retry.detailStatus===500 &&
+      byName.active_resume_detail_failure_falls_back_to_retry.hasDone===true &&
+      byName.active_resume_detail_failure_falls_back_to_retry.successDelta===1 &&
+      byName.active_resume_detail_failure_falls_back_to_retry.suppressedDetailDelta===0 &&
+      byName.active_resume_detail_failure_falls_back_to_retry.detailCalls===1 &&
+      byName.active_resume_detail_failure_falls_back_to_retry.streamStatusCalls===1 &&
+      byName.active_resume_detail_failure_falls_back_to_retry.resumeCalls===2 &&
+      JSON.stringify(byName.active_resume_detail_failure_falls_back_to_retry.offsets)==='[0,1]',
     activeResumeCompletionBefore404:
       byName.active_resume_completion_before_404.streamStatus==='IS_STREAMING' &&
       byName.active_resume_completion_before_404.status===404 &&
