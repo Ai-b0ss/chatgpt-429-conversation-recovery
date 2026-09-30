@@ -134,7 +134,8 @@ class H(BaseHTTPRequestHandler):
                 "resume-exhaust",
                 "resume-abort",
                 "resume-concurrent",
-                "resume-cross-tab"
+                "resume-cross-tab",
+                "resume-stale-status"
             ):
                 return self.sendb(404,'{"detail":"resume target missing"}')
             if ident=="resume-nonstream":
