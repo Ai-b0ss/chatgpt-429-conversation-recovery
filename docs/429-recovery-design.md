@@ -12,10 +12,11 @@ The guard does not attempt to evade or bypass server-side limits. It changes onl
 
 1. identical in-flight conversation reads are coalesced;
 2. competing reads for the same conversation are serialized across tabs;
-3. after 429, retries wait using a bounded local backoff and any longer server Retry-After value;
-4. cooldown state survives a page reload;
-5. after repeated 429s, the guard stops retrying internally and returns the final server response;
-6. unrelated requests pass through unchanged.
+3. a 429 creates both a request-specific cooldown and a conversation-family cooldown, so another protected chat/tab does not immediately add pressure to the same rate-limit family;
+4. after 429, retries wait using a bounded local backoff and any longer server `Retry-After` value; delta-seconds and HTTP-date are accepted, with a one-hour cap and a small grace buffer;
+5. cooldown state survives a page reload;
+6. after repeated 429s, the guard stops retrying internally and returns the final server response;
+7. unrelated requests pass through unchanged.
 
 ## Protected surfaces
 

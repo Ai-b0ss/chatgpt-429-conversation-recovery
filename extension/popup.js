@@ -33,6 +33,7 @@ async function refresh(command = "status") {
       "Retries after 429: " + m.retries429 + "\n" +
       "Recovered after 429: " + m.successAfter429 + "\n" +
       "Final 429 responses: " + m.final429 + "\n" +
+      "Cross-chat cooldown waits: " + (m.globalCooldownHits || 0) + "\n" +
       "Wait time: " + m.totalWaitMs + " ms";
   } catch (error) {
     status = null;

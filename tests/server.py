@@ -48,15 +48,17 @@ class H(BaseHTTPRequestHandler):
         if path.startswith("/backend-api/conversations/"):
             ident=path.rsplit("/",1)[-1]
             n=bump(path,"GET")
-            if ident in ("concurrent","request-object","two-tabs"):
+            if ident in ("concurrent","request-object","two-tabs","global-a"):
                 if n==1:
                     return self.sendb(429,'{"detail":"Too many requests"}')
+                return self.sendb(200,json.dumps({"ok":True,"id":ident,"n":n}))
+            if ident=="global-b":
                 return self.sendb(200,json.dumps({"ok":True,"id":ident,"n":n}))
             if ident=="always-429":
                 return self.sendb(429,'{"detail":"Too many requests"}')
             if ident=="retry-after":
                 if n==1:
-                    return self.sendb(429,'{"detail":"Too many requests"}',{"Retry-After":"1"})
+                    return self.sendb(429,'{"detail":"Too many requests"}',{"Retry-After":"14"})
                 return self.sendb(200,'{"ok":true}')
             return self.sendb(200,json.dumps({"ok":True,"id":ident,"n":n}))
         bump(path,"GET")
