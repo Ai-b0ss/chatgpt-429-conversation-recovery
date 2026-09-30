@@ -4,7 +4,7 @@ Unofficial browser-side recovery tools for ChatGPT conversation and streaming fa
 
 Common search/UI wording for the problem includes **“This chat is unavailable”**, **“Chat unavailable”**, **“stream interrupted”**, **HTTP 429 / Too Many Requests**, and the Russian ChatGPT message **«Этот чат недоступен»**.
 
-**Current stable variant:** **ChatGPT 429 Guard v0.8.1** — targets the 429-backed form of the “This chat is unavailable” / «Этот чат недоступен» failure. It reduces duplicate conversation reads after HTTP 429 / “Too Many Requests” and waits before retrying instead of letting the UI repeatedly hammer the same endpoint.
+**Current stable variant:** **ChatGPT 429 Guard v0.8.2** — targets the 429-backed form of the “This chat is unavailable” / «Этот чат недоступен» failure. It reduces duplicate conversation reads after HTTP 429 / “Too Many Requests” and waits before retrying instead of letting the UI repeatedly hammer the same endpoint.
 
 The same visible “chat unavailable” message can have other causes. If no 429 is present, this specific variant may not help; other recovery paths should remain separate until verified.
 
@@ -14,7 +14,7 @@ The same visible “chat unavailable” message can have other causes. If no 429
 
 We captured a real ChatGPT failure where one conversation was fetched 34 times: 4 successful reads followed by 30 HTTP 429 responses. The failed reads were spaced about 5.3 seconds apart, matching a client recovery loop.
 
-The 429 Guard sits in front of a small set of conversation-read requests. When a 429 appears, it coalesces duplicate reads, waits, honors `Retry-After`, coordinates tabs, and lets ChatGPT retry later with much less request pressure.
+The 429 Guard sits in front of a small set of conversation-read requests. When a 429 appears, it coalesces duplicate reads, shares a conversation-family cooldown across protected chats/tabs, honors `Retry-After` (including long server-directed waits), and lets ChatGPT retry later with much less request pressure.
 
 ## What it protects
 
@@ -62,6 +62,8 @@ The extension is deliberately conservative:
 - the same conversation shares a rate-limit key across legacy/current read endpoints;
 - Chrome Web Locks serialize competing reads across tabs;
 - cooldown survives a page reload;
+- a 429 on one protected conversation read slows other protected conversation reads during the same cooldown window;
+- positive `Retry-After` values are honored as seconds or HTTP dates, with a one-hour safety cap;
 - normal pre-response aborts do not create a false cooldown;
 - every deduplicated caller receives its own cloned `Response`;
 - a local kill switch can disable the guard immediately for future requests.
@@ -110,5 +112,7 @@ The project is unofficial and is not affiliated with or endorsed by OpenAI.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+Upstream engineering references and license decisions are recorded in [docs/upstream-tech-audit.md](docs/upstream-tech-audit.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Russian quick start: [README.ru.md](README.ru.md).

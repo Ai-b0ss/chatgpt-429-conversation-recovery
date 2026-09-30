@@ -1,4 +1,4 @@
-// ChatGPT 429 Guard v0.8.1
+// ChatGPT 429 Guard v0.8.2
 // Reduces duplicate conversation reads after HTTP 429; it does not bypass rate limits.
 (() => {
   if (window.__CGUARD_INSTALLED__) return;
@@ -10,6 +10,9 @@
   const failureLevel = new Map();
   const peers = new Map();
   const channel = new BroadcastChannel("chatgpt-429-guard-v1");
+  const globalRateKey = "conversation-family";
+  const retryAfterMaxMs = 60 * 60 * 1000;
+  const retryAfterGraceMs = 1000;
   const detailBackoffs = [12000, 15000, 60000, 120000, 240000];
   const listBackoffs = [8000, 30000];
   const detailMaxInternalRetries = 4;
@@ -20,7 +23,7 @@
   const cooldownStoragePrefix = "chatgpt-429-guard:cooldown:";
 
   const metrics = {
-    version: "0.8.1",
+    version: "0.8.2",
     installedAt: new Date().toISOString(),
     protectedCalls: 0,
     nativeCalls: 0,
@@ -33,6 +36,7 @@
     abortedCalls: 0,
     crossTabLocks: 0,
     persistedCooldownHits: 0,
+    globalCooldownHits: 0,
     staleCooldownsCleared: 0,
     passive429: 0,
     passive429BySurface: {},
@@ -75,10 +79,13 @@
   };
 
   const setCooldownUntil = (key, until) => {
-    cooldown.set(key, until);
+    const persisted = readPersistedCooldown(key);
+    const next = Math.max(cooldown.get(key) || 0, persisted, until);
+    cooldown.set(key, next);
     try {
-      localStorage.setItem(storageCooldownKey(key), String(until));
+      localStorage.setItem(storageCooldownKey(key), String(next));
     } catch {}
+    return next;
   };
 
   const clearCooldown = key => {
@@ -159,14 +166,18 @@
       ? response.headers.get("retry-after")
       : null;
     if (!raw) return 0;
+
+    let parsed = 0;
     const seconds = Number(raw);
     if (Number.isFinite(seconds) && seconds >= 0) {
-      return Math.min(seconds * 1000, 300000);
+      parsed = seconds * 1000;
+    } else {
+      const when = Date.parse(raw);
+      if (Number.isFinite(when)) parsed = Math.max(0, when - now());
     }
-    const when = Date.parse(raw);
-    return Number.isFinite(when)
-      ? Math.max(0, Math.min(when - now(), 300000))
-      : 0;
+
+    if (parsed <= 0) return 0;
+    return Math.min(parsed + retryAfterGraceMs, retryAfterMaxMs);
   };
 
   const requestSignal = (input, init) => {
@@ -271,7 +282,7 @@
     await sleep(Math.min(ms, 3000), signal);
   }
 
-  async function waitForCooldown(key, signal) {
+  const activeCooldownUntil = key => {
     const memoryUntil = cooldown.get(key) || 0;
     const persistedUntil = readPersistedCooldown(key);
     const until = Math.max(memoryUntil, persistedUntil);
@@ -279,10 +290,39 @@
       cooldown.set(key, persistedUntil);
       metrics.persistedCooldownHits++;
     }
+    if (until <= now()) {
+      cooldown.delete(key);
+      return 0;
+    }
+    return until;
+  };
+
+  const applyRateCooldown = (key, until) => {
+    const ownUntil = setCooldownUntil(key, until);
+    const familyUntil = setCooldownUntil(globalRateKey, until);
+    channel.postMessage({ type: "peer-429", key, until: ownUntil });
+    channel.postMessage({
+      type: "peer-429",
+      key: globalRateKey,
+      until: familyUntil
+    });
+    return Math.max(ownUntil, familyUntil);
+  };
+
+  async function waitForCooldown(key, signal) {
+    const ownUntil = activeCooldownUntil(key);
+    const familyUntil = key === globalRateKey
+      ? 0
+      : activeCooldownUntil(globalRateKey);
+    const until = Math.max(ownUntil, familyUntil);
     const ms = until - now();
     if (ms <= 0) return;
+    if (familyUntil > ownUntil) metrics.globalCooldownHits++;
     metrics.totalWaitMs += ms;
-    log("cooldown-wait", { waitMs: ms });
+    log("cooldown-wait", {
+      waitMs: ms,
+      scope: familyUntil > ownUntil ? "conversation-family" : "request"
+    });
     await sleep(ms, signal);
   }
 
@@ -342,8 +382,7 @@
         const wait = Math.max(localWait, serverWait)
           + Math.floor(Math.random() * 500);
         const until = now() + wait;
-        setCooldownUntil(key, until);
-        channel.postMessage({ type: "peer-429", key, until });
+        applyRateCooldown(key, until);
         metrics.totalWaitMs += wait;
         log("429-backoff", {
           surface,
@@ -362,12 +401,7 @@
         (failureLevel.get(key) || 0) + 1
       );
       const terminalUntil = now() + terminalCooldownMs;
-      setCooldownUntil(key, terminalUntil);
-      channel.postMessage({
-        type: "peer-429",
-        key,
-        until: terminalUntil
-      });
+      applyRateCooldown(key, terminalUntil);
       log("429-final", { surface, cooldownMs: terminalCooldownMs });
       return lastResponse;
     } catch (error) {
@@ -376,12 +410,7 @@
         if (saw429) {
           failureLevel.delete(key);
           const abortUntil = now() + abortCooldownMs;
-          setCooldownUntil(key, abortUntil);
-          channel.postMessage({
-            type: "peer-429",
-            key,
-            until: abortUntil
-          });
+          applyRateCooldown(key, abortUntil);
           log("aborted-after-429", {
             surface,
             cooldownMs: abortCooldownMs
@@ -494,12 +523,22 @@
     return task.then(response => response.clone());
   };
 
+  const activeCooldownCount = () => {
+    const current = now();
+    let count = 0;
+    for (const [key, until] of cooldown) {
+      if (until > current) count++;
+      else cooldown.delete(key);
+    }
+    return count;
+  };
+
   window.__CGUARD_STATUS__ = () => ({
     installed: true,
     version: metrics.version,
     disabled: disabled(),
     pendingCount: pendingCount(),
-    cooldownCount: cooldown.size,
+    cooldownCount: activeCooldownCount(),
     failureKeys: failureLevel.size,
     peerCount: peers.size,
     metrics: { ...metrics }

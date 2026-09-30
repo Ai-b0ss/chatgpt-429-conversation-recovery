@@ -45,6 +45,20 @@ async function state(request){
   return await (await request.get(base+'/state')).json();
 }
 
+async function clearGuardCooldowns(page){
+  await page.evaluate(()=>{
+    const prefix='chatgpt-429-guard:cooldown:';
+    const remove=[];
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      if(key&&key.startsWith(prefix)) remove.push(key);
+    }
+    for(const key of remove) localStorage.removeItem(key);
+  });
+  await page.reload({waitUntil:'domcontentloaded',timeout:10000});
+  await page.waitForFunction(()=>typeof __CGUARD_STATUS__==='function',{timeout:10000});
+}
+
 (async()=>{
   await waitServer();
   fs.rmSync(profile,{recursive:true,force:true});
@@ -116,6 +130,7 @@ async function state(request){
     name:'abort_during_backoff',outcome:abort,elapsedMs:Date.now()-t0,
     networkCalls:st.counts['GET /backend-api/conversations/always-429']||0
   });
+  await clearGuardCooldowns(page);
   await reset(context.request);
   t0=Date.now();
   const reqObj=await page.evaluate(async base=>{
@@ -137,6 +152,26 @@ async function state(request){
   results.tests.push({
     name:'retry_after_honored',status:retryAfter,elapsedMs:Date.now()-t0,
     networkCalls:st.counts['GET /backend-api/conversations/retry-after']||0
+  });
+
+  await reset(context.request);
+  t0=Date.now();
+  const family=await page.evaluate(async base=>{
+    const first=fetch(base+'/backend-api/conversations/global-a').then(r=>r.status);
+    await new Promise(r=>setTimeout(r,250));
+    const second=fetch(base+'/backend-api/conversations/global-b').then(r=>r.status);
+    return await Promise.all([first,second]);
+  },base);
+  st=await state(context.request);
+  const aCall=st.calls.find(c=>c.path==='/backend-api/conversations/global-a'&&c.n===1);
+  const bCall=st.calls.find(c=>c.path==='/backend-api/conversations/global-b'&&c.n===1);
+  results.tests.push({
+    name:'different_conversations_share_cooldown',
+    statuses:family,
+    elapsedMs:Date.now()-t0,
+    firstToSecondMs:aCall&&bCall?Math.round((bCall.t-aCall.t)*1000):null,
+    aCalls:st.counts['GET /backend-api/conversations/global-a']||0,
+    bCalls:st.counts['GET /backend-api/conversations/global-b']||0
   });
 
   await reset(context.request);
@@ -176,16 +211,22 @@ async function state(request){
       ]))
     : null;
   results.guardStatus=await page.evaluate(()=>__CGUARD_STATUS__());
+  const byName=Object.fromEntries(results.tests.map(t=>[t.name,t]));
   const checks={
-    fiveConcurrent:results.tests[0].networkCalls===2 && results.tests[0].statuses.every(x=>x===200),
-    nonTarget:results.tests[1].networkCalls===1 && results.tests[1].status===429,
-    post:results.tests[2].networkCalls===1 && results.tests[2].status===429,
-    abort:results.tests[3].networkCalls===1 && results.tests[3].outcome.resolved===false,
-    requestObject:results.tests[4].networkCalls===2 && results.tests[4].status===200,
-    retryAfter:results.tests[5].networkCalls===2 && results.tests[5].status===200 && results.tests[5].elapsedMs>=900,
-    killSwitch:results.tests[6].networkCalls===1 && results.tests[6].status===429,
-    twoTabs:results.tests[7].networkCalls<=3 && results.tests[7].statuses.every(x=>x===200),
-    networkTelemetry:(results.storage?.cguard_counts?.['network-429']||0)>=5
+    fiveConcurrent:byName.five_concurrent.networkCalls===2 && byName.five_concurrent.statuses.every(x=>x===200),
+    nonTarget:byName.non_target_passthrough.networkCalls===1 && byName.non_target_passthrough.status===429,
+    post:byName.post_passthrough.networkCalls===1 && byName.post_passthrough.status===429,
+    abort:byName.abort_during_backoff.networkCalls===1 && byName.abort_during_backoff.outcome.resolved===false,
+    requestObject:byName.request_object.networkCalls===2 && byName.request_object.status===200,
+    retryAfter:byName.retry_after_honored.networkCalls===2 && byName.retry_after_honored.status===200 && byName.retry_after_honored.elapsedMs>=14500,
+    globalCooldown:byName.different_conversations_share_cooldown.aCalls===2 &&
+      byName.different_conversations_share_cooldown.bCalls===1 &&
+      byName.different_conversations_share_cooldown.statuses.every(x=>x===200) &&
+      byName.different_conversations_share_cooldown.firstToSecondMs>=11000,
+    killSwitch:byName.kill_switch.networkCalls===1 && byName.kill_switch.status===429,
+    twoTabs:byName.two_tabs_same_conversation.networkCalls<=3 && byName.two_tabs_same_conversation.statuses.every(x=>x===200),
+    networkTelemetry:(results.storage?.cguard_counts?.['network-429']||0)>=6,
+    globalCooldownMetric:(results.guardStatus?.metrics?.globalCooldownHits||0)>=1
   };
   results.checks=checks;
   results.pass=Object.values(checks).every(Boolean);
