@@ -32,6 +32,10 @@ class H(BaseHTTPRequestHandler):
         parsed=urllib.parse.urlparse(self.path)
         path=parsed.path
         if path=="/ws" and self.headers.get("Upgrade","").lower()=="websocket":
+            query=urllib.parse.parse_qs(parsed.query)
+            conversation_id=query.get("conversation_id",["resume-404"])[0]
+            try: delay_ms=max(0,min(2000,int(query.get("delay_ms",["0"])[0])))
+            except Exception: delay_ms=0
             key=self.headers.get("Sec-WebSocket-Key","")
             accept=base64.b64encode(hashlib.sha1(
                 (key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
@@ -41,12 +45,14 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Connection","Upgrade")
             self.send_header("Sec-WebSocket-Accept",accept)
             self.end_headers()
+            if delay_ms:
+                time.sleep(delay_ms/1000)
             payload=json.dumps({
                 "type":"message",
                 "topic_id":"conversations",
                 "payload":{
                     "type":"conversation-turn-complete",
-                    "payload":{"conversation_id":"resume-404"}
+                    "payload":{"conversation_id":conversation_id}
                 }
             }).encode("utf-8")
             if len(payload)<126:
@@ -106,9 +112,36 @@ class H(BaseHTTPRequestHandler):
             try: body=json.loads(raw)
             except Exception: body={}
             ident=body.get("conversation_id")
-            if ident=="resume-404":
+            offset=body.get("offset")
+            with lock:
+                if state["calls"] and state["calls"][-1].get("path")==path:
+                    state["calls"][-1]["conversation_id"]=ident
+                    state["calls"][-1]["offset"]=offset
+                    state["calls"][-1]["probe"]=body.get("probe")
+                    state["calls"][-1]["resume_context"]=self.headers.get("X-Resume-Context")
+            if ident=="resume-race":
+                time.sleep(0.30)
                 return self.sendb(404,'{"detail":"resume target missing"}')
-            if ident=="resume-success":
+            if ident in ("resume-404","resume-ws","resume-exhaust","resume-abort","resume-concurrent"):
+                return self.sendb(404,'{"detail":"resume target missing"}')
+            if ident=="resume-nonstream":
+                if offset==0:
+                    return self.sendb(404,'{"detail":"resume target missing"}')
+                return self.sendb(200,'{"ok":true}')
+            if ident=="resume-handoff":
+                if offset==0:
+                    return self.sendb(404,'{"detail":"resume target missing"}')
+                stream=(
+                    'event: resume_conversation_token\n'
+                    'data: {"type":"resume_conversation_token","token":"lab-token","conversation_id":"resume-handoff"}\n\n'
+                    'data: {"type":"stream_handoff","conversation_id":"resume-handoff","turn_exchange_id":"lab-turn",'
+                    '"options":[{"type":"subscribe_ws_topic","topic_id":"conversation-turn-lab-turn"}]}\n\n'
+                    'data: [DONE]\n\n'
+                )
+                return self.sendb(200,stream,ctype="text/event-stream")
+            if ident in ("resume-recover","resume-oldcomplete") and offset!=1:
+                return self.sendb(404,'{"detail":"resume offset missing"}')
+            if ident in ("resume-success","resume-recover","resume-oldcomplete"):
                 stream=(
                     'data: {"p":"","o":"add","v":{"message":{"id":"a1","author":{"role":"assistant"},'
                     '"channel":"final","status":"in_progress","end_turn":false}}}\n\n'
