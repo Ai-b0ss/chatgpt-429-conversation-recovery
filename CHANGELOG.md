@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.1 — 2026-09-30
+
+Security and discoverability hardening.
+
+- Adds exact search wording for “This chat is unavailable” / «Этот чат недоступен».
+- Narrows the background webRequest observer to `https://chatgpt.com/backend-api/*`.
+- Pins GitHub Actions to full commit SHAs and keeps workflow permissions read-only.
+- Disables persisted checkout credentials in CI.
+- Adds Dependabot, CODEOWNERS, expanded security documentation and safer contribution guidance.
+- Extends regression coverage to verify network-level 429 telemetry.
+
 ## 0.8.0 — 2026-09-30
 
 First public 429-focused release.

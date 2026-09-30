@@ -1,4 +1,4 @@
-// ChatGPT 429 Guard v0.8.0
+// ChatGPT 429 Guard v0.8.1
 // Reduces duplicate conversation reads after HTTP 429; it does not bypass rate limits.
 (() => {
   if (window.__CGUARD_INSTALLED__) return;
@@ -20,7 +20,7 @@
   const cooldownStoragePrefix = "chatgpt-429-guard:cooldown:";
 
   const metrics = {
-    version: "0.8.0",
+    version: "0.8.1",
     installedAt: new Date().toISOString(),
     protectedCalls: 0,
     nativeCalls: 0,

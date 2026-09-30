@@ -18,6 +18,13 @@ const manifest=JSON.parse(fs.readFileSync(manifestPath,'utf8'));
 for(const script of manifest.content_scripts) script.matches=[base+'/*'];
 manifest.host_permissions=[base+'/*'];
 fs.writeFileSync(manifestPath,JSON.stringify(manifest,null,2));
+const backgroundPath=path.join(ext,'background.js');
+let background=fs.readFileSync(backgroundPath,'utf8');
+background=background.replaceAll(
+  'https://chatgpt.com/backend-api/*',
+  base+'/backend-api/*'
+);
+fs.writeFileSync(backgroundPath,background);
 
 const python=process.platform==='win32'?'python':'python3';
 const server=spawn(python,[path.join(__dirname,'server.py')],{stdio:'ignore'});
@@ -158,6 +165,16 @@ async function state(request){
     networkCalls:st.counts['GET /backend-api/conversations/two-tabs']||0
   });
 
+  let worker=null;
+  for(let i=0;i<30&&!worker;i++){
+    worker=context.serviceWorkers().find(w=>w.url().startsWith('chrome-extension://'))||null;
+    if(!worker) await page.waitForTimeout(100);
+  }
+  results.storage=worker
+    ? await worker.evaluate(async()=>await chrome.storage.local.get([
+        'cguard_counts','cguard_last_event'
+      ]))
+    : null;
   results.guardStatus=await page.evaluate(()=>__CGUARD_STATUS__());
   const checks={
     fiveConcurrent:results.tests[0].networkCalls===2 && results.tests[0].statuses.every(x=>x===200),
@@ -167,7 +184,8 @@ async function state(request){
     requestObject:results.tests[4].networkCalls===2 && results.tests[4].status===200,
     retryAfter:results.tests[5].networkCalls===2 && results.tests[5].status===200 && results.tests[5].elapsedMs>=900,
     killSwitch:results.tests[6].networkCalls===1 && results.tests[6].status===429,
-    twoTabs:results.tests[7].networkCalls<=3 && results.tests[7].statuses.every(x=>x===200)
+    twoTabs:results.tests[7].networkCalls<=3 && results.tests[7].statuses.every(x=>x===200),
+    networkTelemetry:(results.storage?.cguard_counts?.['network-429']||0)>=5
   };
   results.checks=checks;
   results.pass=Object.values(checks).every(Boolean);
