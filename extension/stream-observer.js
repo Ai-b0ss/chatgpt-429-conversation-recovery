@@ -54,6 +54,8 @@
     stockResumeOffsets: {},
     recoveryAborted: 0,
     recoveryRejectedNonStream: 0,
+    recoveryRejectedInvalidStream: 0,
+    recoveryValidationTimeouts: 0,
     recoveryExhausted: 0,
     parseErrors: 0,
     lastEventAt: null
@@ -479,6 +481,117 @@
     }
   };
 
+  const recoveryEvidenceFromEvent = event => {
+    const state = { evidence: false, errorCode: null };
+    const visit = value => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item);
+        return;
+      }
+      if (typeof value.error_code === "string" && value.error_code) {
+        state.errorCode = value.error_code.slice(0, 80);
+      }
+      if (
+        value.type === "resume_conversation_token" ||
+        value.type === "stream_handoff" ||
+        value.type === "message_stream_complete" ||
+        value.message ||
+        Object.prototype.hasOwnProperty.call(value, "v")
+      ) {
+        state.evidence = true;
+      }
+      if (Array.isArray(value.v)) {
+        for (const item of value.v) visit(item);
+      } else if (value.v && typeof value.v === "object") {
+        visit(value.v);
+      }
+    };
+    visit(event);
+    return state;
+  };
+
+  const validateRecoveryStream = async (response, signal) => {
+    let clone;
+    try { clone = response.clone(); }
+    catch { return { ok: false, reason: "clone-failed" }; }
+    if (!clone.body) return { ok: false, reason: "missing-body" };
+
+    const reader = clone.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let bytesRead = 0;
+    let explicitError = null;
+    const maxBytes = 128 * 1024;
+    const maxWaitMs = 1500;
+    const deadline = performance.now() + maxWaitMs;
+
+    const inspectBlock = block => {
+      const data = block.split("\n")
+        .filter(line => line.startsWith("data:"))
+        .map(line => line.slice(5).trimStart())
+        .join("\n")
+        .trim();
+      if (!data || data === "[DONE]") return false;
+      try {
+        const event = JSON.parse(data);
+        const evidence = recoveryEvidenceFromEvent(event);
+        if (evidence.errorCode) explicitError = evidence.errorCode;
+        return evidence.evidence;
+      } catch {
+        return false;
+      }
+    };
+
+    try {
+      while (bytesRead <= maxBytes) {
+        if (signal?.aborted) {
+          throw signal.reason || new DOMException("Aborted", "AbortError");
+        }
+        const remaining = Math.max(0, deadline - performance.now());
+        if (remaining <= 0) {
+          metrics.recoveryValidationTimeouts++;
+          return { ok: false, reason: "validation-timeout" };
+        }
+        const timeout = Symbol("timeout");
+        const result = await Promise.race([
+          reader.read(),
+          sleep(remaining, signal).then(() => timeout)
+        ]);
+        if (result === timeout) {
+          metrics.recoveryValidationTimeouts++;
+          return { ok: false, reason: "validation-timeout" };
+        }
+        if (result.done) {
+          if (buffer.trim()) {
+            if (inspectBlock(buffer) && !explicitError) {
+              return { ok: true, reason: "protocol-evidence" };
+            }
+          }
+          return {
+            ok: false,
+            reason: explicitError ? "error-only-stream" : "empty-stream"
+          };
+        }
+
+        bytesRead += result.value?.byteLength || 0;
+        buffer += decoder.decode(result.value, { stream: true })
+          .replace(/\r\n/g, "\n");
+        const blocks = buffer.split("\n\n");
+        buffer = blocks.pop() ?? "";
+        for (const block of blocks) {
+          const evidence = inspectBlock(block);
+          if (evidence && !explicitError) {
+            return { ok: true, reason: "protocol-evidence" };
+          }
+        }
+      }
+      return { ok: false, reason: "validation-byte-limit" };
+    } finally {
+      try { void reader.cancel(); } catch {}
+    }
+  };
+
   const consumeResumeStream = async (response, conversationId) => {
     const tracker = createTracker();
     if (!response?.body) return tracker;
@@ -743,6 +856,20 @@
             attempt: attemptsMade,
             status: retryResponse.status,
             reason: "non-stream-response"
+          });
+          return null;
+        }
+
+        const validation = await validateRecoveryStream(
+          retryResponse,
+          retryRequest.signal
+        );
+        if (!validation.ok) {
+          metrics.recoveryRejectedInvalidStream++;
+          emit("resume-recovery-stopped", {
+            attempt: attemptsMade,
+            status: retryResponse.status,
+            reason: validation.reason
           });
           return null;
         }
