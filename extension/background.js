@@ -91,7 +91,7 @@ chrome.webRequest.onCompleted.addListener(details => {
       tabId: details.tabId
     });
   }
-}, { urls: ["<all_urls>"] });
+}, { urls: ["https://chatgpt.com/backend-api/*"] });
 
 chrome.webRequest.onErrorOccurred.addListener(details => {
   const surface = classify(details.url, details.method);
@@ -104,4 +104,4 @@ chrome.webRequest.onErrorOccurred.addListener(details => {
     error: details.error,
     tabId: details.tabId
   });
-}, { urls: ["<all_urls>"] });
+}, { urls: ["https://chatgpt.com/backend-api/*"] });

@@ -1,6 +1,6 @@
 name: ChatGPT 429 / Too Many Requests
-description: Report a 429 conversation-loading or stream-recovery problem
-title: "[429] "
+description: Report «Этот чат недоступен» / Chat unavailable / HTTP 429 conversation-loading failures
+title: "[429 / Этот чат недоступен] "
 labels: ["429", "bug"]
 body:
   - type: markdown
