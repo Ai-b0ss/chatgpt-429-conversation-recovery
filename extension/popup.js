@@ -18,17 +18,27 @@ async function refresh(command = "status") {
       throw Error(reply?.error || "Reload the ChatGPT tab.");
     }
     status = reply.status;
-    byId("status").textContent = status.disabled
-      ? "Protection is disabled"
-      : "429 protection is active";
-    byId("toggle").disabled = false;
-    byId("toggle").textContent = status.disabled
-      ? "Enable protection"
-      : "Disable protection";
+    const pageVersion = String(
+      status.version || status.metrics?.version || "unknown"
+    );
+    const versionMismatch = pageVersion !== extensionVersion;
+    byId("status").textContent = versionMismatch
+      ? "Reload this ChatGPT tab: page Guard v" + pageVersion +
+        ", extension v" + extensionVersion
+      : (status.disabled
+          ? "Protection is disabled"
+          : "429 protection is active");
+    byId("toggle").disabled = versionMismatch;
+    byId("toggle").textContent = versionMismatch
+      ? "Reload tab first"
+      : (status.disabled
+          ? "Enable protection"
+          : "Disable protection");
 
     const m = status.metrics;
     byId("metrics").textContent =
       "This tab\n" +
+      "Page Guard: v" + String(status.version || m.version || "unknown") + "\n" +
       "Pending: " + status.pendingCount + "\n" +
       "Retries after 429: " + m.retries429 + "\n" +
       "Recovered after 429: " + m.successAfter429 + "\n" +
