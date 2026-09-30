@@ -975,6 +975,55 @@ async function clearGuardCooldowns(page){
     offsets:nonStreamCalls.map(c=>c.offset)
   });
 
+
+  for (const invalidCase of [
+    ['error_only','resume-error-sse','error-only-stream'],
+    ['empty','resume-empty-sse','empty-stream']
+  ]) {
+    await reset(context.request);
+    t0=Date.now();
+    const invalidRecovery=await page.evaluate(async ({base,ident})=>{
+      const before=__CGUARD_STREAM_STATUS__().metrics
+        .recoveryRejectedInvalidStream||0;
+      const statusResponse=await fetch(
+        base+'/backend-api/conversation/'+ident+'/stream_status'
+      );
+      const streamStatus=(await statusResponse.json()).status;
+      await new Promise(r=>setTimeout(r,100));
+      const response=await fetch(base+'/backend-api/f/conversation/resume',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({conversation_id:ident,offset:0})
+      });
+      const body=await response.text();
+      await new Promise(r=>setTimeout(r,100));
+      const observer=__CGUARD_STREAM_STATUS__();
+      return {
+        streamStatus,
+        status:response.status,
+        original404Body:body.includes('resume target missing'),
+        rejectedDelta:
+          (observer.metrics.recoveryRejectedInvalidStream||0)-before,
+        observer
+      };
+    },{base,ident:invalidCase[1]});
+    st=await state(context.request);
+    const invalidCalls=st.calls.filter(
+      c=>c.path==='/backend-api/f/conversation/resume'
+    );
+    results.tests.push({
+      name:'active_resume_rejects_'+invalidCase[0]+'_sse',
+      expectedReason:invalidCase[2],
+      ...invalidRecovery,
+      elapsedMs:Date.now()-t0,
+      streamStatusCalls:st.counts[
+        'GET /backend-api/conversation/'+invalidCase[1]+'/stream_status'
+      ]||0,
+      resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0,
+      offsets:invalidCalls.map(c=>c.offset)
+    });
+  }
+
   await reset(context.request);
   t0=Date.now();
   const abortedRecovery=await page.evaluate(async base=>{
@@ -1206,6 +1255,22 @@ async function clearGuardCooldowns(page){
       byName.active_resume_rejects_nonstream_200.streamStatusCalls===1 &&
       byName.active_resume_rejects_nonstream_200.resumeCalls===2 &&
       JSON.stringify(byName.active_resume_rejects_nonstream_200.offsets)==='[0,1]',
+    activeResumeRejectsErrorOnlySse:
+      byName.active_resume_rejects_error_only_sse.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_rejects_error_only_sse.status===404 &&
+      byName.active_resume_rejects_error_only_sse.original404Body===true &&
+      byName.active_resume_rejects_error_only_sse.rejectedDelta===1 &&
+      byName.active_resume_rejects_error_only_sse.streamStatusCalls===1 &&
+      byName.active_resume_rejects_error_only_sse.resumeCalls===2 &&
+      JSON.stringify(byName.active_resume_rejects_error_only_sse.offsets)==='[0,1]',
+    activeResumeRejectsEmptySse:
+      byName.active_resume_rejects_empty_sse.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_rejects_empty_sse.status===404 &&
+      byName.active_resume_rejects_empty_sse.original404Body===true &&
+      byName.active_resume_rejects_empty_sse.rejectedDelta===1 &&
+      byName.active_resume_rejects_empty_sse.streamStatusCalls===1 &&
+      byName.active_resume_rejects_empty_sse.resumeCalls===2 &&
+      JSON.stringify(byName.active_resume_rejects_empty_sse.offsets)==='[0,1]',
     activeResumeAbort:
       byName.active_resume_abort_propagation.streamStatus==='IS_STREAMING' &&
       byName.active_resume_abort_propagation.outcome?.resolved===false &&

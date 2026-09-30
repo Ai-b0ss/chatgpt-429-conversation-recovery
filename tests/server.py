@@ -142,6 +142,18 @@ class H(BaseHTTPRequestHandler):
                 if offset==0:
                     return self.sendb(404,'{"detail":"resume target missing"}')
                 return self.sendb(200,'{"ok":true}')
+            if ident=="resume-error-sse":
+                if offset==0:
+                    return self.sendb(404,'{"detail":"resume target missing"}')
+                stream=(
+                    'data: {"error":"resume failed","error_code":"resume_failed"}\n\n'
+                    'data: [DONE]\n\n'
+                )
+                return self.sendb(200,stream,ctype="text/event-stream")
+            if ident=="resume-empty-sse":
+                if offset==0:
+                    return self.sendb(404,'{"detail":"resume target missing"}')
+                return self.sendb(200,'data: [DONE]\n\n',ctype="text/event-stream")
             if ident=="resume-handoff":
                 if offset==0:
                     return self.sendb(404,'{"detail":"resume target missing"}')
