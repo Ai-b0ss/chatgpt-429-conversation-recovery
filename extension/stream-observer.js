@@ -11,9 +11,14 @@
   const completionByConversation = new Map();
   const completionWaiters = new Map();
   let completionSequence = 0;
+  const detailInFlightByConversation = new Map();
+  const detailSuccessByConversation = new Map();
+  const detailOutcomeWaiters = new Map();
+  let detailSequence = 0;
   const recoveryInFlight = new Set();
   const stateTtlMs = 2 * 60 * 1000;
   const recoveryGraceMs = 1200;
+  const recoveryDetailExtensionMs = 4800;
   const recoveryRetryDelayMs = 150;
   const recoveryOffsetCandidates = [0, 1, 2];
   const recoveryMaxAttempts = recoveryOffsetCandidates.length;
@@ -34,6 +39,10 @@
     recoveryAttempts: 0,
     recoverySuccess: 0,
     recoverySuppressedByWebsocket: 0,
+    recoverySuppressedByDetail: 0,
+    stockDetailObserved: 0,
+    stockDetailSuccess: 0,
+    recoveryDetailWaits: 0,
     recoverySkippedNoStreaming: 0,
     recoverySkippedUnsupported: 0,
     recoverySkippedConcurrent: 0,
@@ -142,6 +151,112 @@
     }
   };
 
+  const waitForDetailOutcome = (
+    conversationId,
+    sinceSequence,
+    ms,
+    signal
+  ) => new Promise((resolve, reject) => {
+    if (!conversationId) {
+      resolve(null);
+      return;
+    }
+    const recentSuccess = detailSuccessByConversation.get(conversationId);
+    if (recentSuccess?.seq > sinceSequence) {
+      resolve("success");
+      return;
+    }
+    if (signal?.aborted) {
+      reject(signal.reason || new DOMException("Aborted", "AbortError"));
+      return;
+    }
+
+    let settled = false;
+    const waiters = detailOutcomeWaiters.get(conversationId) || new Set();
+    const cleanup = () => {
+      waiters.delete(finish);
+      if (!waiters.size) detailOutcomeWaiters.delete(conversationId);
+      if (signal) signal.removeEventListener("abort", onAbort);
+    };
+    const finish = value => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      cleanup();
+      resolve(value);
+    };
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      cleanup();
+      reject(signal.reason || new DOMException("Aborted", "AbortError"));
+    };
+
+    waiters.add(finish);
+    detailOutcomeWaiters.set(conversationId, waiters);
+    const timer = setTimeout(() => finish(null), ms);
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+  });
+
+  const waitForNaturalRecoverySignal = async (
+    conversationId,
+    completionSequenceAtStart,
+    detailSequenceAtStart,
+    ms,
+    signal
+  ) => {
+    const never = new Promise(() => {});
+    return await Promise.race([
+      waitForConversationCompletion(
+        conversationId,
+        completionSequenceAtStart,
+        ms,
+        signal
+      ).then(value => value ? "provider-complete" : never),
+      waitForDetailOutcome(
+        conversationId,
+        detailSequenceAtStart,
+        ms,
+        signal
+      ).then(value => value === "success" ? "stock-detail-success" : never),
+      sleep(ms, signal).then(() => null)
+    ]);
+  };
+
+  const beginDetailRequest = conversationId => {
+    if (!conversationId) return;
+    const count = detailInFlightByConversation.get(conversationId) || 0;
+    detailInFlightByConversation.set(conversationId, count + 1);
+    metrics.stockDetailObserved++;
+  };
+
+  const finishDetailRequest = (conversationId, ok) => {
+    if (!conversationId) return;
+    const count = Math.max(
+      0,
+      (detailInFlightByConversation.get(conversationId) || 1) - 1
+    );
+    if (count) detailInFlightByConversation.set(conversationId, count);
+    else detailInFlightByConversation.delete(conversationId);
+
+    if (ok) {
+      detailSequence++;
+      detailSuccessByConversation.set(conversationId, {
+        at: Date.now(),
+        seq: detailSequence
+      });
+      metrics.stockDetailSuccess++;
+    }
+
+    const waiters = detailOutcomeWaiters.get(conversationId);
+    if (!waiters) return;
+    detailOutcomeWaiters.delete(conversationId);
+    for (const finish of [...waiters]) {
+      try { finish(ok ? "success" : "failed"); } catch {}
+    }
+  };
+
   const cleanState = () => {
     const cutoff = Date.now() - stateTtlMs;
     for (const [key, value] of streamStatusByConversation) {
@@ -152,6 +267,9 @@
     }
     for (const [key, value] of completionByConversation) {
       if (!value?.at || value.at < cutoff) completionByConversation.delete(key);
+    }
+    for (const [key, value] of detailSuccessByConversation) {
+      if (!value?.at || value.at < cutoff) detailSuccessByConversation.delete(key);
     }
   };
 
@@ -172,6 +290,21 @@
     const match = url.pathname.match(
       /^\/backend-api\/conversation\/([^/?]+)\/stream_status$/
     );
+    return match ? decodeURIComponent(match[1]) : null;
+  };
+
+  const conversationDetailConversationId = info => {
+    if (!info || info.url.origin !== location.origin || info.method !== "GET") {
+      return null;
+    }
+    let match = info.url.pathname.match(
+      /^\/backend-api\/conversations\/([^/?]+)$/
+    );
+    if (!match) {
+      match = info.url.pathname.match(
+        /^\/backend-api\/conversation\/([^/?]+)$/
+      );
+    }
     return match ? decodeURIComponent(match[1]) : null;
   };
 
@@ -441,7 +574,8 @@
   const maybeRecoverResume404 = async (
     retryRequest,
     metadataPromise,
-    completionSequenceAtStart = completionSequence
+    completionSequenceAtStart = completionSequence,
+    detailSequenceAtStart = detailSequence
   ) => {
     const candidateAt = Date.now();
     metrics.recoveryCandidates++;
@@ -477,15 +611,35 @@
     }
 
     const runRecovery = async () => {
-      const completed = await waitForConversationCompletion(
+      let naturalSignal = await waitForNaturalRecoverySignal(
         conversationId,
         completionSequenceAtStart,
+        detailSequenceAtStart,
         recoveryGraceMs,
         retryRequest.signal
       );
-      if (completed) {
-        metrics.recoverySuppressedByWebsocket++;
-        emit("resume-recovery-suppressed", { reason: "provider-complete" });
+
+      if (
+        !naturalSignal &&
+        (detailInFlightByConversation.get(conversationId) || 0) > 0
+      ) {
+        metrics.recoveryDetailWaits++;
+        naturalSignal = await waitForNaturalRecoverySignal(
+          conversationId,
+          completionSequenceAtStart,
+          detailSequenceAtStart,
+          recoveryDetailExtensionMs,
+          retryRequest.signal
+        );
+      }
+
+      if (naturalSignal) {
+        if (naturalSignal === "provider-complete") {
+          metrics.recoverySuppressedByWebsocket++;
+        } else if (naturalSignal === "stock-detail-success") {
+          metrics.recoverySuppressedByDetail++;
+        }
+        emit("resume-recovery-suppressed", { reason: naturalSignal });
         return null;
       }
 
@@ -622,7 +776,12 @@
     const statusConversationId = info
       ? streamStatusConversationId(info.url)
       : null;
+    const detailConversationId = conversationDetailConversationId(info);
     const resume = isResumeRequest(info);
+
+    if (detailConversationId) {
+      beginDetailRequest(detailConversationId);
+    }
 
     let retryRequest = null;
     let metadataPromise = Promise.resolve(null);
@@ -647,11 +806,24 @@
       });
     }
     const completionSequenceAtStart = resume ? completionSequence : 0;
+    const detailSequenceAtStart = resume ? detailSequence : 0;
 
-    const task = originalFetch(input, init);
-    if (!statusConversationId && !resume) return task;
+    let task;
+    try {
+      task = originalFetch(input, init);
+    } catch (error) {
+      if (detailConversationId) {
+        finishDetailRequest(detailConversationId, false);
+      }
+      throw error;
+    }
+    if (!statusConversationId && !resume && !detailConversationId) return task;
 
     return task.then(async response => {
+      if (detailConversationId) {
+        finishDetailRequest(detailConversationId, response.ok);
+      }
+
       let clone = null;
       try { clone = response.clone(); } catch {}
       if (statusConversationId && clone) {
@@ -668,11 +840,17 @@
         const recovered = await maybeRecoverResume404(
           retryRequest,
           metadataPromise,
-          completionSequenceAtStart
+          completionSequenceAtStart,
+          detailSequenceAtStart
         );
         if (recovered) return recovered;
       }
       return response;
+    }, error => {
+      if (detailConversationId) {
+        finishDetailRequest(detailConversationId, false);
+      }
+      throw error;
     });
   };
   const inspectWsFrame = frame => {
@@ -741,6 +919,9 @@
     trackedStreamStatuses: streamStatusByConversation.size,
     trackedResumes: resumeByConversation.size,
     completionWaiterConversations: completionWaiters.size,
+    detailInFlightConversations: detailInFlightByConversation.size,
+    trackedDetailSuccesses: detailSuccessByConversation.size,
+    detailOutcomeWaiterConversations: detailOutcomeWaiters.size,
     metrics: { ...metrics }
   });
 
