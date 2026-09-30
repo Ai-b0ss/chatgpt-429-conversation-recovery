@@ -1,6 +1,6 @@
 # Stream / Resume recovery lab
 
-Status: experimental branch `stream-resume-lab`.
+Status: passive observer is on `stream-resume-lab`; opt-in active recovery is developed on `resume-404-recovery-lab`.
 
 The stable 429 Guard remains narrow. This lab studies a different failure class: an
 existing ChatGPT turn is still running, the page reloads or loses its stream, and
@@ -8,10 +8,11 @@ ChatGPT attempts to continue through `/backend-api/f/conversation/resume`.
 
 ## Current lab rule
 
-The first stage is **passive only**. It does not create `stream_status` requests,
-does not create `/resume` requests, and does not poll the conversation API.
+The observer remains **passive by default**. It does not create `stream_status`
+requests, does not create `/resume` requests, and does not poll the conversation
+API unless the separate lab-only recovery switch is explicitly enabled.
 
-It observes only traffic ChatGPT itself already generated:
+In normal/passive mode it observes only traffic ChatGPT itself already generated:
 
 - `GET /backend-api/conversation/<id>/stream_status`
 - `POST /backend-api/f/conversation/resume`
@@ -58,36 +59,52 @@ The observer only records whether a resume token was seen, never the token itsel
 
 ## Regression coverage
 
-The local browser regression now simulates:
+The browser regression covers both the passive observer and the opt-in active lab:
 
-1. a stock `stream_status` response with `IS_STREAMING`;
-2. a stock resume that returns HTTP 404;
-3. a real RFC6455 WebSocket frame carrying
-   `conversation-turn-complete` for that same conversation;
-4. a second resume whose final Assistant state arrives through v1 patches;
-5. `message_stream_complete` and `[DONE]`.
+1. stock `stream_status = IS_STREAMING`;
+2. stock resume HTTP 404;
+3. real RFC6455 `conversation-turn-complete`;
+4. successful resume whose final Assistant state arrives through v1 patches;
+5. `message_stream_complete` and `[DONE]`;
+6. active 404 recovery from offset 0 to offset 1;
+7. exact preservation of unrelated JSON body fields and request headers;
+8. WebSocket completion suppressing an unnecessary retry;
+9. no retry without recent stock `IS_STREAMING` evidence;
+10. bounded exhaustion at offsets 0/1/2;
+11. abort propagation during the grace window;
+12. rejection of an HTTP 200 retry that is not an SSE response;
+13. provider completion arriving before the stock 404 response, with no stale
+    pending-404 state and no retry;
+14. handoff-only SSE recovery, proving that a valid transport handoff is returned
+    to ChatGPT without being misclassified as a final Assistant answer or leaking
+    the resume token into diagnostics;
+15. a completion from the previous turn in the same conversation does not suppress
+    recovery of a newer turn; correlation uses a monotonic completion sequence
+    instead of millisecond timestamps;
+16. two simultaneous stock resume 404s in one page share one recovery owner:
+    exactly one bounded 0→1→2 recovery sequence runs and the second caller does
+    not start a duplicate retry storm.
 
-Expected result: the observer recognizes the 404-while-streaming shape, correlates
-the later WebSocket completion, recognizes the patched final Assistant, and emits
-no parser errors.
+## Opt-in active recovery
 
-## Candidate active recovery (not enabled yet)
+`resume-404-recovery-lab` exposes an explicit in-page lab switch. It is disabled
+by default and is not part of the stable v0.8.3 release.
 
-The next experimental stage can be gated on strong evidence:
+When enabled, a stock resume 404 is eligible only when a recent stock
+`IS_STREAMING` was already observed for the same conversation. The lab then:
 
-1. Stock resume returns 404.
-2. A fresh stock `IS_STREAMING` was observed for the same conversation.
-3. No matching `conversation-turn-complete` arrives during a short grace window.
-4. The original stock resume request can be cloned without exposing or persisting
-   its token/credentials.
-5. Retry count is strictly bounded and abort/navigation aware.
+1. waits 1.2 seconds for a provider `conversation-turn-complete`;
+2. if provider completion arrives, sends no retry;
+3. otherwise rebuilds the exact observed stock Request, preserving its headers,
+   credentials and unrelated JSON fields;
+4. increments only the resume `offset`, with at most two additional attempts;
+5. accepts a replacement only when HTTP is successful **and** the response is an
+   SSE body (`text/event-stream`);
+6. propagates AbortSignal cancellation and stops on non-404 HTTP errors;
+7. returns the original stock 404 if recovery is ineligible or exhausted.
 
-Public implementations show two useful recovery patterns: retrying resume with
-small offsets (for example 0/1/2), and waiting for the provider WebSocket terminal
-before deciding that a 404 represents a failed continuation.
-
-Neither strategy is enabled until the passive observer has enough live evidence
-from real ChatGPT failures.
+No token, header value, conversation id, prompt, answer text or raw stream payload
+is persisted by diagnostics.
 
 ## Upstream evidence
 

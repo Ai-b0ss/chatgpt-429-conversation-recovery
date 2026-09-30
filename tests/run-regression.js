@@ -241,6 +241,446 @@ async function clearGuardCooldowns(page){
   });
 
   await reset(context.request);
+  t0=Date.now();
+  const activeRecovery=await page.evaluate(async base=>{
+    __CGUARD_RESUME_RECOVERY_ENABLE__();
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-recover/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,100));
+    const started=performance.now();
+    const recovered=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{
+        'content-type':'application/json',
+        'x-resume-context':'preserve-me'
+      },
+      body:JSON.stringify({
+        conversation_id:'resume-recover',
+        offset:0,
+        probe:'keep-me'
+      })
+    });
+    const body=await recovered.text();
+    await new Promise(r=>setTimeout(r,150));
+    return {
+      streamStatus,
+      status:recovered.status,
+      elapsedMs:Math.round(performance.now()-started),
+      hasDone:body.includes('[DONE]'),
+      observer:__CGUARD_STREAM_STATUS__()
+    };
+  },base);
+  st=await state(context.request);
+  const recoveryCalls=st.calls.filter(
+    c=>c.path==='/backend-api/f/conversation/resume'
+  );
+  results.tests.push({
+    name:'active_resume_offset_recovery',
+    ...activeRecovery,
+    totalElapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/resume-recover/stream_status']||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0,
+    offsets:recoveryCalls.map(c=>c.offset),
+    probes:recoveryCalls.map(c=>c.probe),
+    contexts:recoveryCalls.map(c=>c.resume_context)
+  });
+
+  await reset(context.request);
+  t0=Date.now();
+  const handoffRecovery=await page.evaluate(async base=>{
+    const before=__CGUARD_STREAM_STATUS__().metrics;
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-handoff/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,50));
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({conversation_id:'resume-handoff',offset:0})
+    });
+    const body=await response.text();
+    await new Promise(r=>setTimeout(r,150));
+    const observer=__CGUARD_STREAM_STATUS__();
+    return {
+      streamStatus,
+      status:response.status,
+      hasHandoff:body.includes('stream_handoff'),
+      handoffDelta:
+        (observer.metrics.resumeHandoffObserved||0)-
+        (before.resumeHandoffObserved||0),
+      terminalDelta:
+        (observer.metrics.resumeTerminalSuccess||0)-
+        (before.resumeTerminalSuccess||0),
+      observerContainsSyntheticToken:
+        JSON.stringify(observer).includes('lab-token'),
+      observer
+    };
+  },base);
+  st=await state(context.request);
+  const handoffCalls=st.calls.filter(
+    c=>c.path==='/backend-api/f/conversation/resume'
+  );
+  results.tests.push({
+    name:'active_resume_accepts_handoff_sse',
+    ...handoffRecovery,
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/resume-handoff/stream_status']||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0,
+    offsets:handoffCalls.map(c=>c.offset)
+  });
+
+  await reset(context.request);
+  t0=Date.now();
+  const websocketSuppression=await page.evaluate(async base=>{
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-ws/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,100));
+    const ws=new WebSocket(
+      base.replace(/^http/,'ws')+
+      '/ws?conversation_id=resume-ws&delay_ms=250'
+    );
+    await new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>reject(new Error('ws-open-timeout')),1000);
+      ws.addEventListener('open',()=>{clearTimeout(timer);resolve();},{once:true});
+      ws.addEventListener('error',()=>{clearTimeout(timer);reject(new Error('ws-open-error'));},{once:true});
+    });
+    const started=performance.now();
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({conversation_id:'resume-ws',offset:0})
+    });
+    await response.text();
+    await new Promise(r=>setTimeout(r,100));
+    try{ws.close();}catch{}
+    return {
+      streamStatus,
+      status:response.status,
+      elapsedMs:Math.round(performance.now()-started),
+      observer:__CGUARD_STREAM_STATUS__()
+    };
+  },base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'active_resume_ws_suppression',
+    ...websocketSuppression,
+    totalElapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/resume-ws/stream_status']||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0
+  });
+  await reset(context.request);
+  t0=Date.now();
+  const completionBefore404=await page.evaluate(async base=>{
+    const before=__CGUARD_STREAM_STATUS__().metrics;
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-race/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,50));
+    const ws=new WebSocket(
+      base.replace(/^http/,'ws')+
+      '/ws?conversation_id=resume-race&delay_ms=150'
+    );
+    await new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>reject(new Error('ws-open-timeout')),1000);
+      ws.addEventListener('open',()=>{clearTimeout(timer);resolve();},{once:true});
+      ws.addEventListener('error',()=>{clearTimeout(timer);reject(new Error('ws-open-error'));},{once:true});
+    });
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({conversation_id:'resume-race',offset:0})
+    });
+    await response.text();
+    await new Promise(r=>setTimeout(r,150));
+    try{ws.close();}catch{}
+    const after=__CGUARD_STREAM_STATUS__();
+    return {
+      streamStatus,
+      status:response.status,
+      completed404Delta:
+        (after.metrics.resume404AfterCompletion||0)-
+        (before.resume404AfterCompletion||0),
+      suppressedDelta:
+        (after.metrics.recoverySuppressedByWebsocket||0)-
+        (before.recoverySuppressedByWebsocket||0),
+      observer:after
+    };
+  },base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'active_resume_completion_before_404',
+    ...completionBefore404,
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/resume-race/stream_status']||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0
+  });
+
+  await reset(context.request);
+  t0=Date.now();
+  const oldCompletionDoesNotSuppress=await page.evaluate(async base=>{
+    const before=__CGUARD_STREAM_STATUS__().metrics;
+    const ws=new WebSocket(
+      base.replace(/^http/,'ws')+
+      '/ws?conversation_id=resume-oldcomplete&delay_ms=0'
+    );
+    await new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>reject(new Error('old-ws-timeout')),1000);
+      ws.addEventListener('message',()=>{
+        clearTimeout(timer);
+        resolve();
+      },{once:true});
+      ws.addEventListener('error',()=>{
+        clearTimeout(timer);
+        reject(new Error('old-ws-error'));
+      },{once:true});
+    });
+    try{ws.close();}catch{}
+    await new Promise(r=>setTimeout(r,50));
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-oldcomplete/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,50));
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({conversation_id:'resume-oldcomplete',offset:0})
+    });
+    const body=await response.text();
+    await new Promise(r=>setTimeout(r,100));
+    const after=__CGUARD_STREAM_STATUS__();
+    return {
+      streamStatus,
+      status:response.status,
+      hasDone:body.includes('[DONE]'),
+      suppressedDelta:
+        (after.metrics.recoverySuppressedByWebsocket||0)-
+        (before.recoverySuppressedByWebsocket||0),
+      successDelta:
+        (after.metrics.recoverySuccess||0)-
+        (before.recoverySuccess||0),
+      observer:after
+    };
+  },base);
+  st=await state(context.request);
+  const oldCompletionCalls=st.calls.filter(
+    c=>c.path==='/backend-api/f/conversation/resume'
+  );
+  results.tests.push({
+    name:'active_resume_old_completion_does_not_suppress',
+    ...oldCompletionDoesNotSuppress,
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/resume-oldcomplete/stream_status']||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0,
+    offsets:oldCompletionCalls.map(c=>c.offset)
+  });
+
+  await reset(context.request);
+  t0=Date.now();
+  const concurrentRecovery=await page.evaluate(async base=>{
+    const before=__CGUARD_STREAM_STATUS__().metrics;
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-concurrent/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,50));
+    const makeResume=()=>fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({conversation_id:'resume-concurrent',offset:0})
+    }).then(async response=>({
+      status:response.status,
+      body:await response.text()
+    }));
+    const responses=await Promise.all([makeResume(),makeResume()]);
+    await new Promise(r=>setTimeout(r,100));
+    const after=__CGUARD_STREAM_STATUS__();
+    return {
+      streamStatus,
+      statuses:responses.map(r=>r.status),
+      skippedConcurrentDelta:
+        (after.metrics.recoverySkippedConcurrent||0)-
+        (before.recoverySkippedConcurrent||0),
+      exhaustedDelta:
+        (after.metrics.recoveryExhausted||0)-
+        (before.recoveryExhausted||0),
+      observer:after
+    };
+  },base);
+  st=await state(context.request);
+  const concurrentCalls=st.calls.filter(
+    c=>c.path==='/backend-api/f/conversation/resume'
+  );
+  results.tests.push({
+    name:'active_resume_same_page_concurrency',
+    ...concurrentRecovery,
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/resume-concurrent/stream_status']||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0,
+    offsets:concurrentCalls.map(c=>c.offset)
+  });
+
+  await reset(context.request);
+  t0=Date.now();
+  const noStreamingRecovery=await page.evaluate(async base=>{
+    const before=__CGUARD_STREAM_STATUS__().metrics.recoverySkippedNoStreaming||0;
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({conversation_id:'resume-exhaust',offset:0})
+    });
+    await response.text();
+    await new Promise(r=>setTimeout(r,100));
+    const observer=__CGUARD_STREAM_STATUS__();
+    return {
+      status:response.status,
+      skippedDelta:(observer.metrics.recoverySkippedNoStreaming||0)-before,
+      observer
+    };
+  },base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'active_resume_requires_streaming_evidence',
+    ...noStreamingRecovery,
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/resume-exhaust/stream_status']||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0
+  });
+
+  await reset(context.request);
+  t0=Date.now();
+  const exhaustedRecovery=await page.evaluate(async base=>{
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-exhaust/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,100));
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{
+        'content-type':'application/json',
+        'x-resume-context':'exhaust-context'
+      },
+      body:JSON.stringify({
+        conversation_id:'resume-exhaust',
+        offset:0,
+        probe:'exhaust-probe'
+      })
+    });
+    await response.text();
+    await new Promise(r=>setTimeout(r,100));
+    return {
+      streamStatus,
+      status:response.status,
+      observer:__CGUARD_STREAM_STATUS__()
+    };
+  },base);
+  st=await state(context.request);
+  const exhaustedCalls=st.calls.filter(
+    c=>c.path==='/backend-api/f/conversation/resume'
+  );
+  results.tests.push({
+    name:'active_resume_bounded_exhaustion',
+    ...exhaustedRecovery,
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/resume-exhaust/stream_status']||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0,
+    offsets:exhaustedCalls.map(c=>c.offset),
+    probes:exhaustedCalls.map(c=>c.probe),
+    contexts:exhaustedCalls.map(c=>c.resume_context)
+  });
+
+  await reset(context.request);
+  t0=Date.now();
+  const nonStreamRecovery=await page.evaluate(async base=>{
+    const before=__CGUARD_STREAM_STATUS__().metrics.recoveryRejectedNonStream||0;
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-nonstream/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,100));
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({conversation_id:'resume-nonstream',offset:0})
+    });
+    const body=await response.text();
+    await new Promise(r=>setTimeout(r,100));
+    const observer=__CGUARD_STREAM_STATUS__();
+    return {
+      streamStatus,
+      status:response.status,
+      original404Body:body.includes('resume target missing'),
+      rejectedDelta:(observer.metrics.recoveryRejectedNonStream||0)-before,
+      observer
+    };
+  },base);
+  st=await state(context.request);
+  const nonStreamCalls=st.calls.filter(
+    c=>c.path==='/backend-api/f/conversation/resume'
+  );
+  results.tests.push({
+    name:'active_resume_rejects_nonstream_200',
+    ...nonStreamRecovery,
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/resume-nonstream/stream_status']||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0,
+    offsets:nonStreamCalls.map(c=>c.offset)
+  });
+
+  await reset(context.request);
+  t0=Date.now();
+  const abortedRecovery=await page.evaluate(async base=>{
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-abort/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,100));
+    const controller=new AbortController();
+    const promise=fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({conversation_id:'resume-abort',offset:0}),
+      signal:controller.signal
+    }).then(async response=>({
+      resolved:true,
+      status:response.status,
+      body:await response.text()
+    })).catch(error=>({
+      resolved:false,
+      name:error?.name||'',
+      message:error?.message||String(error)
+    }));
+    setTimeout(
+      ()=>controller.abort(new DOMException('lab-abort','AbortError')),
+      150
+    );
+    const outcome=await promise;
+    await new Promise(r=>setTimeout(r,100));
+    return {
+      streamStatus,
+      outcome,
+      observer:__CGUARD_STREAM_STATUS__()
+    };
+  },base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'active_resume_abort_propagation',
+    ...abortedRecovery,
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/resume-abort/stream_status']||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0
+  });
+
+  await page.evaluate(()=>__CGUARD_RESUME_RECOVERY_DISABLE__());
+
+  await reset(context.request);
   await page.evaluate(()=>__CGUARD_DISABLE__());
   t0=Date.now();
   const disabled=await page.evaluate(async base=>(await fetch(
@@ -304,6 +744,88 @@ async function clearGuardCooldowns(page){
       (byName.passive_stream_resume_observer.observer?.metrics?.resumeTerminalSuccess||0)>=1 &&
       (byName.passive_stream_resume_observer.observer?.metrics?.websocketTurnComplete||0)>=1 &&
       (byName.passive_stream_resume_observer.observer?.metrics?.websocketAfterResume404||0)>=1,
+    activeResumeRecovery:
+      byName.active_resume_offset_recovery.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_offset_recovery.status===200 &&
+      byName.active_resume_offset_recovery.hasDone===true &&
+      byName.active_resume_offset_recovery.streamStatusCalls===1 &&
+      byName.active_resume_offset_recovery.resumeCalls===2 &&
+      JSON.stringify(byName.active_resume_offset_recovery.offsets)==='[0,1]' &&
+      JSON.stringify(byName.active_resume_offset_recovery.probes)==='["keep-me","keep-me"]' &&
+      JSON.stringify(byName.active_resume_offset_recovery.contexts)==='["preserve-me","preserve-me"]' &&
+      (byName.active_resume_offset_recovery.observer?.metrics?.recoverySuccess||0)>=1 &&
+      (byName.active_resume_offset_recovery.observer?.metrics?.recoveryAttempts||0)>=1,
+    activeResumeHandoff:
+      byName.active_resume_accepts_handoff_sse.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_accepts_handoff_sse.status===200 &&
+      byName.active_resume_accepts_handoff_sse.hasHandoff===true &&
+      byName.active_resume_accepts_handoff_sse.handoffDelta===1 &&
+      byName.active_resume_accepts_handoff_sse.terminalDelta===0 &&
+      byName.active_resume_accepts_handoff_sse.observerContainsSyntheticToken===false &&
+      byName.active_resume_accepts_handoff_sse.streamStatusCalls===1 &&
+      byName.active_resume_accepts_handoff_sse.resumeCalls===2 &&
+      JSON.stringify(byName.active_resume_accepts_handoff_sse.offsets)==='[0,1]',
+    activeResumeWebsocketSuppression:
+      byName.active_resume_ws_suppression.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_ws_suppression.status===404 &&
+      byName.active_resume_ws_suppression.streamStatusCalls===1 &&
+      byName.active_resume_ws_suppression.resumeCalls===1 &&
+      (byName.active_resume_ws_suppression.observer?.metrics?.recoverySuppressedByWebsocket||0)>=1 &&
+      (byName.active_resume_ws_suppression.observer?.metrics?.websocketTurnComplete||0)>=2,
+    activeResumeCompletionBefore404:
+      byName.active_resume_completion_before_404.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_completion_before_404.status===404 &&
+      byName.active_resume_completion_before_404.completed404Delta===1 &&
+      byName.active_resume_completion_before_404.suppressedDelta===1 &&
+      byName.active_resume_completion_before_404.streamStatusCalls===1 &&
+      byName.active_resume_completion_before_404.resumeCalls===1,
+    activeResumeOldCompletionDoesNotSuppress:
+      byName.active_resume_old_completion_does_not_suppress.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_old_completion_does_not_suppress.status===200 &&
+      byName.active_resume_old_completion_does_not_suppress.hasDone===true &&
+      byName.active_resume_old_completion_does_not_suppress.suppressedDelta===0 &&
+      byName.active_resume_old_completion_does_not_suppress.successDelta===1 &&
+      byName.active_resume_old_completion_does_not_suppress.streamStatusCalls===1 &&
+      byName.active_resume_old_completion_does_not_suppress.resumeCalls===2 &&
+      JSON.stringify(byName.active_resume_old_completion_does_not_suppress.offsets)==='[0,1]',
+    activeResumeSamePageConcurrency:
+      byName.active_resume_same_page_concurrency.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_same_page_concurrency.statuses.length===2 &&
+      byName.active_resume_same_page_concurrency.statuses.every(x=>x===404) &&
+      byName.active_resume_same_page_concurrency.skippedConcurrentDelta===1 &&
+      byName.active_resume_same_page_concurrency.exhaustedDelta===1 &&
+      byName.active_resume_same_page_concurrency.streamStatusCalls===1 &&
+      byName.active_resume_same_page_concurrency.resumeCalls===4 &&
+      JSON.stringify([...byName.active_resume_same_page_concurrency.offsets].sort((a,b)=>a-b))==='[0,0,1,2]',
+    activeResumeRequiresStreaming:
+      byName.active_resume_requires_streaming_evidence.status===404 &&
+      byName.active_resume_requires_streaming_evidence.streamStatusCalls===0 &&
+      byName.active_resume_requires_streaming_evidence.resumeCalls===1 &&
+      byName.active_resume_requires_streaming_evidence.skippedDelta===1,
+    activeResumeBoundedExhaustion:
+      byName.active_resume_bounded_exhaustion.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_bounded_exhaustion.status===404 &&
+      byName.active_resume_bounded_exhaustion.streamStatusCalls===1 &&
+      byName.active_resume_bounded_exhaustion.resumeCalls===3 &&
+      JSON.stringify(byName.active_resume_bounded_exhaustion.offsets)==='[0,1,2]' &&
+      JSON.stringify(byName.active_resume_bounded_exhaustion.probes)==='["exhaust-probe","exhaust-probe","exhaust-probe"]' &&
+      JSON.stringify(byName.active_resume_bounded_exhaustion.contexts)==='["exhaust-context","exhaust-context","exhaust-context"]' &&
+      (byName.active_resume_bounded_exhaustion.observer?.metrics?.recoveryExhausted||0)>=1,
+    activeResumeRejectsNonStream:
+      byName.active_resume_rejects_nonstream_200.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_rejects_nonstream_200.status===404 &&
+      byName.active_resume_rejects_nonstream_200.original404Body===true &&
+      byName.active_resume_rejects_nonstream_200.rejectedDelta===1 &&
+      byName.active_resume_rejects_nonstream_200.streamStatusCalls===1 &&
+      byName.active_resume_rejects_nonstream_200.resumeCalls===2 &&
+      JSON.stringify(byName.active_resume_rejects_nonstream_200.offsets)==='[0,1]',
+    activeResumeAbort:
+      byName.active_resume_abort_propagation.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_abort_propagation.outcome?.resolved===false &&
+      byName.active_resume_abort_propagation.outcome?.name==='AbortError' &&
+      byName.active_resume_abort_propagation.streamStatusCalls===1 &&
+      byName.active_resume_abort_propagation.resumeCalls===1 &&
+      (byName.active_resume_abort_propagation.observer?.metrics?.recoveryAborted||0)>=1,
     killSwitch:byName.kill_switch.networkCalls===1 && byName.kill_switch.status===429,
     twoTabs:byName.two_tabs_same_conversation.networkCalls<=3 && byName.two_tabs_same_conversation.statuses.every(x=>x===200),
     networkTelemetry:(results.storage?.cguard_counts?.['network-429']||0)>=6,
