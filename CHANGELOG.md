@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.0 — 2026-09-30
+
+Adds bounded recovery for ChatGPT lost-stream resume 404 failures while preserving the v0.8.4 429 behavior.
+
+- Observes stock `stream_status`, resume SSE, conversation-detail hydration and provider `conversation-turn-complete` signals.
+- Active recovery is enabled by default but requires a stock `IS_STREAMING` observation no older than 30 seconds plus a stock `/backend-api/f/conversation/resume` 404 for the same conversation.
+- Gives natural provider completion and in-flight stock detail hydration a bounded grace window before retrying.
+- Replays the exact observed stock resume Request and changes only `offset`, bounded to candidates 0/1/2 with at most two additional network attempts.
+- Preserves original request headers, credentials and unrelated JSON body fields.
+- Uses Web Locks so simultaneous tabs do not launch duplicate recovery sequences.
+- Validates successful resume responses before replacement: requires `text/event-stream` plus recognizable ChatGPT protocol evidence.
+- Rejects non-SSE, error-only, empty/`[DONE]`-only, validation-timeout and oversized candidates and returns the original stock 404.
+- Propagates AbortSignal cancellation and stops on non-404 HTTP errors.
+- Treats conversation-detail HTTP 200 only as a short grace signal, never as proof that the newest Assistant turn is complete.
+- The existing extension-wide kill switch disables both 429 handling and resume recovery.
+- Conversation ids are used only transiently in page memory; prompts, Assistant text, auth headers, raw stream bodies and resume token values are not persisted.
+
 ## 0.8.4 — 2026-09-30
 
 Live 429/UI-timeout fix based on a real browser failure capture.

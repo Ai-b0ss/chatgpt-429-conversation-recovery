@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT 429 Guard",
-  "version": "0.8.4",
-  "description": "Reduces duplicate ChatGPT conversation retries after HTTP 429 and respects server backoff. Unofficial.",
+  "version": "0.9.0",
+  "description": "Reduces ChatGPT conversation-read 429 retry storms and performs bounded lost-stream resume recovery. Unofficial.",
   "permissions": ["storage", "webRequest"],
   "background": {
     "service_worker": "background.js"

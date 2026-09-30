@@ -1,5 +1,5 @@
-// ChatGPT Stream Resume Lab — passive by default.
-// Optional active resume-404 recovery is lab-only and disabled unless explicitly enabled.
+// ChatGPT Stream Resume Recovery v0.9.0.
+// Passive observation plus bounded active resume-404 recovery; extension kill switch applies.
 (() => {
   if (window.__CGUARD_STREAM_OBSERVER_INSTALLED__) return;
   window.__CGUARD_STREAM_OBSERVER_INSTALLED__ = true;
@@ -24,7 +24,13 @@
   const recoveryRetryDelayMs = 150;
   const recoveryOffsetCandidates = [0, 1, 2];
   const recoveryMaxAttempts = recoveryOffsetCandidates.length;
-  let recoveryEnabled = false;
+  const guardDisableKey = "chatgpt-429-guard:disable";
+  let recoveryEnabled = true;
+  const recoveryActive = () => {
+    if (!recoveryEnabled) return false;
+    try { return localStorage.getItem(guardDisableKey) !== "1"; }
+    catch { return true; }
+  };
   const metrics = {
     installedAt: new Date().toISOString(),
     streamStatusObserved: 0,
@@ -1000,7 +1006,7 @@
           completionSequenceAtStart
         );
       }
-      if (resume && recoveryEnabled && response.status === 404) {
+      if (resume && recoveryActive() && response.status === 404) {
         const recovered = await maybeRecoverResume404(
           retryRequest,
           metadataPromise,
@@ -1079,6 +1085,7 @@
   window.__CGUARD_STREAM_STATUS__ = () => ({
     installed: true,
     recoveryEnabled,
+    recoveryActive: recoveryActive(),
     recoveryInFlight: recoveryInFlight.size,
     trackedStreamStatuses: streamStatusByConversation.size,
     trackedResumes: resumeByConversation.size,
@@ -1089,5 +1096,8 @@
     metrics: { ...metrics }
   });
 
-  emit("stream-observer-installed", { recoveryEnabled });
+  emit("stream-observer-installed", {
+    recoveryEnabled,
+    recoveryActive: recoveryActive()
+  });
 })();
