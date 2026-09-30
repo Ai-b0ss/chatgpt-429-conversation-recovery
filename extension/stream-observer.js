@@ -15,7 +15,8 @@
   const stateTtlMs = 2 * 60 * 1000;
   const recoveryGraceMs = 1200;
   const recoveryRetryDelayMs = 150;
-  const recoveryMaxAttempts = 2;
+  const recoveryOffsetCandidates = [0, 1, 2];
+  const recoveryMaxAttempts = recoveryOffsetCandidates.length;
   let recoveryEnabled = false;
   const metrics = {
     installedAt: new Date().toISOString(),
@@ -36,6 +37,8 @@
     recoverySkippedNoStreaming: 0,
     recoverySkippedUnsupported: 0,
     recoverySkippedConcurrent: 0,
+    recoverySkippedCrossTab: 0,
+    stockResumeOffsets: {},
     recoveryAborted: 0,
     recoveryRejectedNonStream: 0,
     recoveryExhausted: 0,
@@ -473,8 +476,7 @@
       return null;
     }
 
-    recoveryInFlight.add(conversationId);
-    try {
+    const runRecovery = async () => {
       const completed = await waitForConversationCompletion(
         conversationId,
         completionSequenceAtStart,
@@ -487,16 +489,23 @@
         return null;
       }
 
-      for (let attempt = 1; attempt <= recoveryMaxAttempts; attempt++) {
+      const offsets = recoveryOffsetCandidates
+        .filter(candidate => candidate !== offset)
+        .slice(0, recoveryMaxAttempts);
+
+      let attemptsMade = 0;
+      for (const nextOffset of offsets) {
         if (retryRequest.signal?.aborted) {
           throw retryRequest.signal.reason ||
             new DOMException("Aborted", "AbortError");
         }
+
+        attemptsMade++;
         await sleep(
           recoveryRetryDelayMs + Math.floor(Math.random() * 100),
           retryRequest.signal
         );
-        const nextOffset = offset + attempt;
+
         let nextRequest;
         try {
           nextRequest = new Request(retryRequest, {
@@ -515,14 +524,14 @@
         } catch (error) {
           if (retryRequest.signal?.aborted) throw error;
           emit("resume-recovery-network-error", {
-            attempt,
+            attempt: attemptsMade,
             aborted: false
           });
           return null;
         }
 
         emit("resume-recovery-attempt", {
-          attempt,
+          attempt: attemptsMade,
           offset: nextOffset,
           status: retryResponse.status
         });
@@ -530,7 +539,7 @@
         if (retryResponse.status === 404) continue;
         if (!retryResponse.ok) {
           emit("resume-recovery-stopped", {
-            attempt,
+            attempt: attemptsMade,
             status: retryResponse.status
           });
           return null;
@@ -540,7 +549,7 @@
         if (!retryResponse.body || !mimeType.includes("text/event-stream")) {
           metrics.recoveryRejectedNonStream++;
           emit("resume-recovery-stopped", {
-            attempt,
+            attempt: attemptsMade,
             status: retryResponse.status,
             reason: "non-stream-response"
           });
@@ -555,9 +564,10 @@
             Promise.resolve(conversationId)
           );
         }
+
         metrics.recoverySuccess++;
         emit("resume-recovery-success", {
-          attempt,
+          attempt: attemptsMade,
           offset: nextOffset,
           status: retryResponse.status
         });
@@ -565,8 +575,35 @@
       }
 
       metrics.recoveryExhausted++;
-      emit("resume-recovery-exhausted", { attempts: recoveryMaxAttempts });
+      emit("resume-recovery-exhausted", { attempts: attemptsMade });
       return null;
+    };
+
+    recoveryInFlight.add(conversationId);
+    try {
+      if (navigator.locks?.request) {
+        if (retryRequest.signal?.aborted) {
+          throw retryRequest.signal.reason ||
+            new DOMException("Aborted", "AbortError");
+        }
+        return await navigator.locks.request(
+          "chatgpt-resume-recovery:" + conversationId,
+          { ifAvailable: true },
+          async lock => {
+            if (!lock) {
+              metrics.recoverySkippedCrossTab++;
+              emit("resume-recovery-skipped", { reason: "cross-tab" });
+              return null;
+            }
+            if (retryRequest.signal?.aborted) {
+              throw retryRequest.signal.reason ||
+                new DOMException("Aborted", "AbortError");
+            }
+            return await runRecovery();
+          }
+        );
+      }
+      return await runRecovery();
     } catch (error) {
       if (retryRequest.signal?.aborted) {
         metrics.recoveryAborted++;
@@ -600,6 +637,15 @@
     const conversationIdPromise = metadataPromise.then(
       metadata => metadata?.conversationId || null
     );
+    if (resume) {
+      void metadataPromise.then(metadata => {
+        if (!Number.isInteger(metadata?.offset)) return;
+        const key = String(metadata.offset);
+        metrics.stockResumeOffsets[key] =
+          (metrics.stockResumeOffsets[key] || 0) + 1;
+        emit("resume-request-observed", { offset: metadata.offset });
+      });
+    }
     const completionSequenceAtStart = resume ? completionSequence : 0;
 
     const task = originalFetch(input, init);

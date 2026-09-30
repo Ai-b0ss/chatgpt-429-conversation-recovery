@@ -1,7 +1,7 @@
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-import json, time, threading, urllib.parse, hashlib, base64
+import json, time, threading, urllib.parse, hashlib, base64, os
 
-PORT=9342
+PORT=int(os.environ.get("PORT","9342"))
 lock=threading.Lock()
 state={"calls":[],"counts":{}}
 
@@ -122,7 +122,14 @@ class H(BaseHTTPRequestHandler):
             if ident=="resume-race":
                 time.sleep(0.30)
                 return self.sendb(404,'{"detail":"resume target missing"}')
-            if ident in ("resume-404","resume-ws","resume-exhaust","resume-abort","resume-concurrent"):
+            if ident in (
+                "resume-404",
+                "resume-ws",
+                "resume-exhaust",
+                "resume-abort",
+                "resume-concurrent",
+                "resume-cross-tab"
+            ):
                 return self.sendb(404,'{"detail":"resume target missing"}')
             if ident=="resume-nonstream":
                 if offset==0:
@@ -141,7 +148,14 @@ class H(BaseHTTPRequestHandler):
                 return self.sendb(200,stream,ctype="text/event-stream")
             if ident in ("resume-recover","resume-oldcomplete") and offset!=1:
                 return self.sendb(404,'{"detail":"resume offset missing"}')
-            if ident in ("resume-success","resume-recover","resume-oldcomplete"):
+            if ident=="resume-absolute" and offset!=0:
+                return self.sendb(404,'{"detail":"resume absolute offset missing"}')
+            if ident in (
+                "resume-success",
+                "resume-recover",
+                "resume-oldcomplete",
+                "resume-absolute"
+            ):
                 stream=(
                     'data: {"p":"","o":"add","v":{"message":{"id":"a1","author":{"role":"assistant"},'
                     '"channel":"final","status":"in_progress","end_turn":false}}}\n\n'
