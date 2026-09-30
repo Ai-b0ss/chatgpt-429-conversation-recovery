@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.3 — 2026-09-30
+
+Rate-limit de-synchronization hardening.
+
+- Expands the small fixed retry jitter into proportional positive jitter (up to 20% of the local backoff).
+- Keeps `Retry-After` as the hard lower bound, so randomization never retries earlier than the server-directed wait.
+- Reduces the chance that several tabs/conversations wake at the same instant after a shared cooldown and create a fresh mini-storm.
+
 ## 0.8.2 — 2026-09-30
 
 Upstream-informed 429 hardening.

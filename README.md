@@ -4,7 +4,7 @@ Unofficial browser-side recovery tools for ChatGPT conversation and streaming fa
 
 Common search/UI wording for the problem includes **“This chat is unavailable”**, **“Chat unavailable”**, **“stream interrupted”**, **HTTP 429 / Too Many Requests**, and the Russian ChatGPT message **«Этот чат недоступен»**.
 
-**Current stable variant:** **ChatGPT 429 Guard v0.8.2** — targets the 429-backed form of the “This chat is unavailable” / «Этот чат недоступен» failure. It reduces duplicate conversation reads after HTTP 429 / “Too Many Requests” and waits before retrying instead of letting the UI repeatedly hammer the same endpoint.
+**Current stable variant:** **ChatGPT 429 Guard v0.8.3** — targets the 429-backed form of the “This chat is unavailable” / «Этот чат недоступен» failure. It reduces duplicate conversation reads after HTTP 429 / “Too Many Requests” and waits before retrying instead of letting the UI repeatedly hammer the same endpoint.
 
 The same visible “chat unavailable” message can have other causes. If no 429 is present, this specific variant may not help; other recovery paths should remain separate until verified.
 

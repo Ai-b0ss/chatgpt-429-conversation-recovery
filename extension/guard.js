@@ -1,4 +1,4 @@
-// ChatGPT 429 Guard v0.8.2
+// ChatGPT 429 Guard v0.8.3
 // Reduces duplicate conversation reads after HTTP 429; it does not bypass rate limits.
 (() => {
   if (window.__CGUARD_INSTALLED__) return;
@@ -13,6 +13,7 @@
   const globalRateKey = "conversation-family";
   const retryAfterMaxMs = 60 * 60 * 1000;
   const retryAfterGraceMs = 1000;
+  const backoffJitterFraction = 0.20;
   const detailBackoffs = [12000, 15000, 60000, 120000, 240000];
   const listBackoffs = [8000, 30000];
   const detailMaxInternalRetries = 4;
@@ -23,7 +24,7 @@
   const cooldownStoragePrefix = "chatgpt-429-guard:cooldown:";
 
   const metrics = {
-    version: "0.8.2",
+    version: "0.8.3",
     installedAt: new Date().toISOString(),
     protectedCalls: 0,
     nativeCalls: 0,
@@ -178,6 +179,11 @@
 
     if (parsed <= 0) return 0;
     return Math.min(parsed + retryAfterGraceMs, retryAfterMaxMs);
+  };
+
+  const jitteredBackoffMs = baseMs => {
+    const base = Math.max(0, Number(baseMs) || 0);
+    return Math.round(base + (Math.random() * base * backoffJitterFraction));
   };
 
   const requestSignal = (input, init) => {
@@ -379,8 +385,7 @@
           backoffs.length - 1
         )];
         failureLevel.set(key, level + 1);
-        const wait = Math.max(localWait, serverWait)
-          + Math.floor(Math.random() * 500);
+        const wait = Math.max(jitteredBackoffMs(localWait), serverWait);
         const until = now() + wait;
         applyRateCooldown(key, until);
         metrics.totalWaitMs += wait;

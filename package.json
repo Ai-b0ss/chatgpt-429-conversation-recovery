@@ -1,6 +1,6 @@
 {
   "name": "chatgpt-stream-recovery",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "private": true,
   "description": "Regression tests for the ChatGPT 429 Guard browser extension",
   "scripts": {
