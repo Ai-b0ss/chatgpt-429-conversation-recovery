@@ -850,6 +850,52 @@ async function clearGuardCooldowns(page){
 
   await reset(context.request);
   t0=Date.now();
+  const staleStreamingRecovery=await page.evaluate(async base=>{
+    const before=__CGUARD_STREAM_STATUS__().metrics
+      .recoverySkippedStaleStreaming||0;
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-stale-status/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,150));
+    const nativeNow=Date.now;
+    const observedAt=nativeNow();
+    Date.now=()=>observedAt+31_000;
+    try{
+      const response=await fetch(base+'/backend-api/f/conversation/resume',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({
+          conversation_id:'resume-stale-status',
+          offset:0
+        })
+      });
+      await response.text();
+      const observer=__CGUARD_STREAM_STATUS__();
+      return {
+        streamStatus,
+        status:response.status,
+        skippedStaleDelta:
+          (observer.metrics.recoverySkippedStaleStreaming||0)-before,
+        observer
+      };
+    }finally{
+      Date.now=nativeNow;
+    }
+  },base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'active_resume_rejects_stale_streaming_evidence',
+    ...staleStreamingRecovery,
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts[
+      'GET /backend-api/conversation/resume-stale-status/stream_status'
+    ]||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0
+  });
+
+  await reset(context.request);
+  t0=Date.now();
   const exhaustedRecovery=await page.evaluate(async base=>{
     const statusResponse=await fetch(
       base+'/backend-api/conversation/resume-exhaust/stream_status'
@@ -1137,6 +1183,12 @@ async function clearGuardCooldowns(page){
       byName.active_resume_requires_streaming_evidence.streamStatusCalls===0 &&
       byName.active_resume_requires_streaming_evidence.resumeCalls===1 &&
       byName.active_resume_requires_streaming_evidence.skippedDelta===1,
+    activeResumeRejectsStaleStreaming:
+      byName.active_resume_rejects_stale_streaming_evidence.streamStatus==='IS_STREAMING' &&
+      byName.active_resume_rejects_stale_streaming_evidence.status===404 &&
+      byName.active_resume_rejects_stale_streaming_evidence.skippedStaleDelta===1 &&
+      byName.active_resume_rejects_stale_streaming_evidence.streamStatusCalls===1 &&
+      byName.active_resume_rejects_stale_streaming_evidence.resumeCalls===1,
     activeResumeBoundedExhaustion:
       byName.active_resume_bounded_exhaustion.streamStatus==='IS_STREAMING' &&
       byName.active_resume_bounded_exhaustion.status===404 &&

@@ -17,6 +17,7 @@
   let detailSequence = 0;
   const recoveryInFlight = new Set();
   const stateTtlMs = 2 * 60 * 1000;
+  const recoveryStreamingEvidenceMaxAgeMs = 30 * 1000;
   const recoveryGraceMs = 1200;
   const recoveryDetailExtensionMs = 4800;
   const recoveryPostDetailGraceMs = 800;
@@ -46,6 +47,7 @@
     recoveryDetailSuccessObserved: 0,
     recoveryDetailFailureObserved: 0,
     recoverySkippedNoStreaming: 0,
+    recoverySkippedStaleStreaming: 0,
     recoverySkippedUnsupported: 0,
     recoverySkippedConcurrent: 0,
     recoverySkippedCrossTab: 0,
@@ -596,16 +598,27 @@
     const { conversationId, body, offset } = metadata;
     const statusEntry = streamStatusByConversation.get(conversationId);
     const statusAgeMs = statusEntry ? candidateAt - statusEntry.at : null;
-    const streamingSeen = Boolean(
+    const streamingStatusSeen = Boolean(
       statusEntry &&
-      statusEntry.status === "IS_STREAMING" &&
+      statusEntry.status === "IS_STREAMING"
+    );
+    const streamingSeen = Boolean(
+      streamingStatusSeen &&
       statusAgeMs >= 0 &&
-      statusAgeMs <= stateTtlMs
+      statusAgeMs <= recoveryStreamingEvidenceMaxAgeMs
     );
     if (!streamingSeen) {
-      metrics.recoverySkippedNoStreaming++;
+      const staleStreaming = Boolean(
+        streamingStatusSeen &&
+        Number.isFinite(statusAgeMs) &&
+        statusAgeMs > recoveryStreamingEvidenceMaxAgeMs
+      );
+      if (staleStreaming) metrics.recoverySkippedStaleStreaming++;
+      else metrics.recoverySkippedNoStreaming++;
       emit("resume-recovery-skipped", {
-        reason: "no-recent-streaming",
+        reason: staleStreaming
+          ? "stale-streaming-evidence"
+          : "no-recent-streaming",
         statusAgeMs
       });
       return null;
