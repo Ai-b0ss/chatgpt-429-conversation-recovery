@@ -15,7 +15,7 @@
     },
     {
       "matches": ["https://chatgpt.com/*"],
-      "js": ["guard.js", "control.js"],
+      "js": ["guard.js", "stream-observer.js", "control.js"],
       "run_at": "document_start",
       "world": "MAIN"
     }

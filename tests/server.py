@@ -1,5 +1,5 @@
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-import json, time, threading, urllib.parse
+import json, time, threading, urllib.parse, hashlib, base64
 
 PORT=9342
 lock=threading.Lock()
@@ -31,6 +31,32 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed=urllib.parse.urlparse(self.path)
         path=parsed.path
+        if path=="/ws" and self.headers.get("Upgrade","").lower()=="websocket":
+            key=self.headers.get("Sec-WebSocket-Key","")
+            accept=base64.b64encode(hashlib.sha1(
+                (key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
+            ).digest()).decode("ascii")
+            self.send_response(101)
+            self.send_header("Upgrade","websocket")
+            self.send_header("Connection","Upgrade")
+            self.send_header("Sec-WebSocket-Accept",accept)
+            self.end_headers()
+            payload=json.dumps({
+                "type":"message",
+                "topic_id":"conversations",
+                "payload":{
+                    "type":"conversation-turn-complete",
+                    "payload":{"conversation_id":"resume-404"}
+                }
+            }).encode("utf-8")
+            if len(payload)<126:
+                frame=bytes([0x81,len(payload)])+payload
+            else:
+                frame=bytes([0x81,126])+len(payload).to_bytes(2,"big")+payload
+            self.wfile.write(frame)
+            self.wfile.flush()
+            time.sleep(0.05)
+            return
         if path=="/":
             bump(path,"GET")
             return self.sendb(200,HTML,ctype="text/html; charset=utf-8")
@@ -45,6 +71,9 @@ class H(BaseHTTPRequestHandler):
         if path=="/backend-api/models":
             bump(path,"GET")
             return self.sendb(429,'{"detail":"models limited"}')
+        if path.startswith("/backend-api/conversation/") and path.endswith("/stream_status"):
+            bump(path,"GET")
+            return self.sendb(200,'{"status":"IS_STREAMING"}')
         if path.startswith("/backend-api/conversations/"):
             ident=path.rsplit("/",1)[-1]
             n=bump(path,"GET")
@@ -71,6 +100,25 @@ class H(BaseHTTPRequestHandler):
         parsed=urllib.parse.urlparse(self.path)
         path=parsed.path
         bump(path,"POST")
+        if path=="/backend-api/f/conversation/resume":
+            length=int(self.headers.get("Content-Length","0") or "0")
+            raw=self.rfile.read(length).decode("utf-8") if length else "{}"
+            try: body=json.loads(raw)
+            except Exception: body={}
+            ident=body.get("conversation_id")
+            if ident=="resume-404":
+                return self.sendb(404,'{"detail":"resume target missing"}')
+            if ident=="resume-success":
+                stream=(
+                    'data: {"p":"","o":"add","v":{"message":{"id":"a1","author":{"role":"assistant"},'
+                    '"channel":"final","status":"in_progress","end_turn":false}}}\n\n'
+                    'data: {"p":"/message/status","o":"replace","v":"finished_successfully"}\n\n'
+                    'data: {"p":"/message/end_turn","o":"replace","v":true}\n\n'
+                    'data: {"type":"message_stream_complete"}\n\n'
+                    'data: [DONE]\n\n'
+                )
+                return self.sendb(200,stream,ctype="text/event-stream")
+            return self.sendb(200,'data: [DONE]\n\n',ctype="text/event-stream")
         if path.startswith("/backend-api/conversations/"):
             return self.sendb(429,'{"detail":"post limited"}')
         return self.sendb(200,'{"ok":true}')

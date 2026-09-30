@@ -193,6 +193,54 @@ async function clearGuardCooldowns(page){
   });
 
   await reset(context.request);
+  t0=Date.now();
+  const streamResume=await page.evaluate(async base=>{
+    const statusResponse=await fetch(
+      base+'/backend-api/conversation/resume-404/stream_status'
+    );
+    const streamStatus=(await statusResponse.json()).status;
+    await new Promise(r=>setTimeout(r,100));
+    const resume404=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({conversation_id:'resume-404',offset:0})
+    });
+    await resume404.text();
+    const wsObserved=await new Promise(resolve=>{
+      const ws=new WebSocket(base.replace(/^http/,'ws')+'/ws');
+      let seen=false;
+      const timer=setTimeout(()=>{try{ws.close();}catch{} resolve(false);},1000);
+      ws.addEventListener('message',()=>{seen=true;});
+      ws.addEventListener('close',()=>{clearTimeout(timer);resolve(seen);},{once:true});
+    });
+    await new Promise(r=>setTimeout(r,100));
+    const resumeSuccess=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({conversation_id:'resume-success',offset:0})
+    });
+    await resumeSuccess.text();
+    await new Promise(r=>setTimeout(r,200));
+    return {
+      streamStatus,
+      resume404:resume404.status,
+      wsObserved,
+      resumeSuccess:resumeSuccess.status,
+      observer:typeof __CGUARD_STREAM_STATUS__==='function'
+        ? __CGUARD_STREAM_STATUS__()
+        : null
+    };
+  },base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'passive_stream_resume_observer',
+    ...streamResume,
+    elapsedMs:Date.now()-t0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/resume-404/stream_status']||0,
+    resumeCalls:st.counts['POST /backend-api/f/conversation/resume']||0
+  });
+
+  await reset(context.request);
   await page.evaluate(()=>__CGUARD_DISABLE__());
   t0=Date.now();
   const disabled=await page.evaluate(async base=>(await fetch(
@@ -245,6 +293,17 @@ async function clearGuardCooldowns(page){
       byName.different_conversations_share_cooldown.statuses.every(x=>x===200) &&
       byName.different_conversations_share_cooldown.firstToSecondMs>=900 &&
       byName.different_conversations_share_cooldown.firstToSecondMs<2500,
+    streamObserver:byName.passive_stream_resume_observer.streamStatus==='IS_STREAMING' &&
+      byName.passive_stream_resume_observer.resume404===404 &&
+      byName.passive_stream_resume_observer.wsObserved===true &&
+      byName.passive_stream_resume_observer.resumeSuccess===200 &&
+      byName.passive_stream_resume_observer.streamStatusCalls===1 &&
+      byName.passive_stream_resume_observer.resumeCalls===2 &&
+      (byName.passive_stream_resume_observer.observer?.metrics?.streamStatusObserved||0)>=1 &&
+      (byName.passive_stream_resume_observer.observer?.metrics?.resume404WhileStreaming||0)>=1 &&
+      (byName.passive_stream_resume_observer.observer?.metrics?.resumeTerminalSuccess||0)>=1 &&
+      (byName.passive_stream_resume_observer.observer?.metrics?.websocketTurnComplete||0)>=1 &&
+      (byName.passive_stream_resume_observer.observer?.metrics?.websocketAfterResume404||0)>=1,
     killSwitch:byName.kill_switch.networkCalls===1 && byName.kill_switch.status===429,
     twoTabs:byName.two_tabs_same_conversation.networkCalls<=3 && byName.two_tabs_same_conversation.statuses.every(x=>x===200),
     networkTelemetry:(results.storage?.cguard_counts?.['network-429']||0)>=6,
