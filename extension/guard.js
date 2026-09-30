@@ -1,4 +1,4 @@
-// ChatGPT 429 Guard v0.8.3
+// ChatGPT 429 Guard v0.8.4
 // Reduces duplicate conversation reads after HTTP 429; it does not bypass rate limits.
 (() => {
   if (window.__CGUARD_INSTALLED__) return;
@@ -7,24 +7,29 @@
   const nativeFetch = window.fetch.bind(window);
   const pending = new Map();
   const cooldown = new Map();
+  const hardCooldown = new Map();
   const failureLevel = new Map();
   const peers = new Map();
   const channel = new BroadcastChannel("chatgpt-429-guard-v1");
   const globalRateKey = "conversation-family";
   const retryAfterMaxMs = 60 * 60 * 1000;
   const retryAfterGraceMs = 1000;
-  const backoffJitterFraction = 0.20;
-  const detailBackoffs = [12000, 15000, 60000, 120000, 240000];
-  const listBackoffs = [8000, 30000];
-  const detailMaxInternalRetries = 4;
+  const backoffJitterFraction = 0.15;
+  const detailBackoffs = [2000, 4000, 8000, 15000, 60000];
+  const listBackoffs = [1500, 3000];
+  const detailInlineBackoffCapMs = 4000;
+  const listInlineBackoffCapMs = 2500;
+  const softPreflightCapMs = 1200;
+  const detailMaxInternalRetries = 2;
   const listMaxInternalRetries = 1;
   const detailTerminalCooldownMs = 180000;
   const listTerminalCooldownMs = 30000;
   const disableKey = "chatgpt-429-guard:disable";
   const cooldownStoragePrefix = "chatgpt-429-guard:cooldown:";
+  const hardCooldownStoragePrefix = "chatgpt-429-guard:hard-cooldown:";
 
   const metrics = {
-    version: "0.8.3",
+    version: "0.8.4",
     installedAt: new Date().toISOString(),
     protectedCalls: 0,
     nativeCalls: 0,
@@ -38,6 +43,8 @@
     crossTabLocks: 0,
     persistedCooldownHits: 0,
     globalCooldownHits: 0,
+    softCooldownCaps: 0,
+    hardCooldownWaits: 0,
     staleCooldownsCleared: 0,
     passive429: 0,
     passive429BySurface: {},
@@ -65,6 +72,8 @@
 
   const storageCooldownKey = key =>
     cooldownStoragePrefix + hashKey(key);
+  const storageHardCooldownKey = key =>
+    hardCooldownStoragePrefix + hashKey(key);
 
   const readPersistedCooldown = key => {
     try {
@@ -89,10 +98,37 @@
     return next;
   };
 
+  const readPersistedHardCooldown = key => {
+    try {
+      const raw = Number(localStorage.getItem(storageHardCooldownKey(key)));
+      if (!Number.isFinite(raw) || raw <= now()) {
+        localStorage.removeItem(storageHardCooldownKey(key));
+        return 0;
+      }
+      return raw;
+    } catch {
+      return 0;
+    }
+  };
+
+  const setHardCooldownUntil = (key, until) => {
+    if (!Number.isFinite(until) || until <= now()) return 0;
+    const persisted = readPersistedHardCooldown(key);
+    const next = Math.max(hardCooldown.get(key) || 0, persisted, until);
+    hardCooldown.set(key, next);
+    try {
+      localStorage.setItem(storageHardCooldownKey(key), String(next));
+    } catch {}
+    return next;
+  };
+
   const clearCooldown = key => {
     cooldown.delete(key);
-    try { localStorage.removeItem(storageCooldownKey(key)); }
-    catch {}
+    hardCooldown.delete(key);
+    try {
+      localStorage.removeItem(storageCooldownKey(key));
+      localStorage.removeItem(storageHardCooldownKey(key));
+    } catch {}
   };
 
   const cleanupPersistedCooldowns = () => {
@@ -102,7 +138,9 @@
       const remove = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (!key || !key.startsWith(cooldownStoragePrefix)) continue;
+        if (!key ||
+            (!key.startsWith(cooldownStoragePrefix) &&
+             !key.startsWith(hardCooldownStoragePrefix))) continue;
         const value = Number(localStorage.getItem(key));
         if (!Number.isFinite(value) ||
             value <= current ||
@@ -183,7 +221,9 @@
 
   const jitteredBackoffMs = baseMs => {
     const base = Math.max(0, Number(baseMs) || 0);
-    return Math.round(base + (Math.random() * base * backoffJitterFraction));
+    const low = 1 - backoffJitterFraction;
+    const high = 1 + backoffJitterFraction;
+    return Math.round(base * (low + Math.random() * (high - low)));
   };
 
   const requestSignal = (input, init) => {
@@ -276,6 +316,9 @@
         msg.key,
         Math.max(cooldown.get(msg.key) || 0, msg.until)
       );
+      if (Number.isFinite(msg.hardUntil) && msg.hardUntil > now()) {
+        setHardCooldownUntil(msg.key, msg.hardUntil);
+      }
     }
   };
 
@@ -303,31 +346,85 @@
     return until;
   };
 
-  const applyRateCooldown = (key, until) => {
+  const activeHardCooldownUntil = key => {
+    const memoryUntil = hardCooldown.get(key) || 0;
+    const persistedUntil = readPersistedHardCooldown(key);
+    const until = Math.max(memoryUntil, persistedUntil);
+    if (persistedUntil > memoryUntil) {
+      hardCooldown.set(key, persistedUntil);
+      metrics.persistedCooldownHits++;
+    }
+    if (until <= now()) {
+      hardCooldown.delete(key);
+      return 0;
+    }
+    return until;
+  };
+
+  const applyRateCooldown = (key, until, hardUntil = 0) => {
     const ownUntil = setCooldownUntil(key, until);
     const familyUntil = setCooldownUntil(globalRateKey, until);
-    channel.postMessage({ type: "peer-429", key, until: ownUntil });
+    const ownHardUntil = setHardCooldownUntil(key, hardUntil);
+    // Retry-After is authoritative for the request that received it.
+    // Do not impose that hard server deadline on unrelated conversations.
+    const familyHardUntil = 0;
+    channel.postMessage({
+      type: "peer-429",
+      key,
+      until: ownUntil,
+      hardUntil: ownHardUntil
+    });
     channel.postMessage({
       type: "peer-429",
       key: globalRateKey,
-      until: familyUntil
+      until: familyUntil,
+      hardUntil: familyHardUntil
     });
     return Math.max(ownUntil, familyUntil);
   };
 
   async function waitForCooldown(key, signal) {
+    const current = now();
     const ownUntil = activeCooldownUntil(key);
     const familyUntil = key === globalRateKey
       ? 0
       : activeCooldownUntil(globalRateKey);
-    const until = Math.max(ownUntil, familyUntil);
-    const ms = until - now();
-    if (ms <= 0) return;
+    const ownHardUntil = activeHardCooldownUntil(key);
+    const familyHardUntil = key === globalRateKey
+      ? 0
+      : activeHardCooldownUntil(globalRateKey);
+    const hardUntil = Math.max(ownHardUntil, familyHardUntil);
+
+    if (hardUntil > current) {
+      const ms = hardUntil - current;
+      metrics.hardCooldownWaits++;
+      metrics.totalWaitMs += ms;
+      log("cooldown-wait", {
+        waitMs: ms,
+        scope: familyHardUntil > ownHardUntil
+          ? "conversation-family-hard"
+          : "request-hard",
+        rateHash: hashKey(key)
+      });
+      await sleep(ms, signal);
+      return;
+    }
+
+    const softUntil = Math.max(ownUntil, familyUntil);
+    const rawMs = softUntil - current;
+    if (rawMs <= 0) return;
+    const ms = Math.min(rawMs, softPreflightCapMs);
     if (familyUntil > ownUntil) metrics.globalCooldownHits++;
+    if (ms < rawMs) metrics.softCooldownCaps++;
     metrics.totalWaitMs += ms;
     log("cooldown-wait", {
       waitMs: ms,
-      scope: familyUntil > ownUntil ? "conversation-family" : "request"
+      rawWaitMs: rawMs,
+      capped: ms < rawMs,
+      scope: familyUntil > ownUntil
+        ? "conversation-family-soft"
+        : "request-soft",
+      rateHash: hashKey(key)
     });
     await sleep(ms, signal);
   }
@@ -340,6 +437,9 @@
     const maxInternalRetries = isList
       ? listMaxInternalRetries
       : detailMaxInternalRetries;
+    const inlineBackoffCapMs = isList
+      ? listInlineBackoffCapMs
+      : detailInlineBackoffCapMs;
     const terminalCooldownMs = isList
       ? listTerminalCooldownMs
       : detailTerminalCooldownMs;
@@ -380,21 +480,27 @@
 
         metrics.retries429++;
         const level = failureLevel.get(key) || 0;
-        const localWait = backoffs[Math.min(
+        const localBase = backoffs[Math.min(
           level,
           backoffs.length - 1
         )];
+        const localWait = Math.min(
+          jitteredBackoffMs(localBase),
+          inlineBackoffCapMs
+        );
         failureLevel.set(key, level + 1);
-        const wait = Math.max(jitteredBackoffMs(localWait), serverWait);
-        const until = now() + wait;
-        applyRateCooldown(key, until);
+        const wait = Math.max(localWait, serverWait);
+        const softUntil = now() + wait;
+        const hardUntil = serverWait > 0 ? now() + serverWait : 0;
+        applyRateCooldown(key, softUntil, hardUntil);
         metrics.totalWaitMs += wait;
         log("429-backoff", {
           surface,
           elapsedMs: elapsed,
           attempt,
           waitMs: wait,
-          retryAfterMs: serverWait
+          retryAfterMs: serverWait,
+          rateHash: hashKey(key)
         });
         await sleep(wait, signal);
       }
@@ -407,7 +513,11 @@
       );
       const terminalUntil = now() + terminalCooldownMs;
       applyRateCooldown(key, terminalUntil);
-      log("429-final", { surface, cooldownMs: terminalCooldownMs });
+      log("429-final", {
+        surface,
+        cooldownMs: terminalCooldownMs,
+        rateHash: hashKey(key)
+      });
       return lastResponse;
     } catch (error) {
       if (signal && signal.aborted) {
@@ -418,7 +528,8 @@
           applyRateCooldown(key, abortUntil);
           log("aborted-after-429", {
             surface,
-            cooldownMs: abortCooldownMs
+            cooldownMs: abortCooldownMs,
+            rateHash: hashKey(key)
           });
         } else {
           log("aborted-before-response", { surface });

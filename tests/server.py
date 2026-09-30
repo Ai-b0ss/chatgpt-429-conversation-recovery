@@ -60,6 +60,10 @@ class H(BaseHTTPRequestHandler):
                 if n==1:
                     return self.sendb(429,'{"detail":"Too many requests"}',{"Retry-After":"14"})
                 return self.sendb(200,'{"ok":true}')
+            if ident=="ui-budget":
+                if n<=2:
+                    return self.sendb(429,'{"detail":"Too many requests"}')
+                return self.sendb(200,'{"ok":true}')
             return self.sendb(200,json.dumps({"ok":True,"id":ident,"n":n}))
         bump(path,"GET")
         return self.sendb(404,'{"error":"not found"}')

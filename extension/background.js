@@ -34,6 +34,24 @@ chrome.runtime.onMessage.addListener(message => {
   enqueueEvent(message.event);
 });
 
+function hashKey(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+function rateHashFor(url) {
+  let path;
+  try { path = new URL(url).pathname; }
+  catch { return null; }
+  let match = path.match(/^\/backend-api\/conversations\/([^/?]+)$/);
+  if (!match) match = path.match(/^\/backend-api\/conversation\/([^/?]+)(?:\/stream_status)?$/);
+  return match ? hashKey("conversation:" + match[1]) : null;
+}
+
 function classify(url, method) {
   let path;
   try { path = new URL(url).pathname; }
@@ -76,7 +94,8 @@ chrome.webRequest.onCompleted.addListener(details => {
       surface,
       method: details.method,
       status: details.statusCode,
-      tabId: details.tabId
+      tabId: details.tabId,
+      rateHash: rateHashFor(details.url)
     });
     return;
   }
@@ -88,7 +107,8 @@ chrome.webRequest.onCompleted.addListener(details => {
       surface,
       method: details.method,
       status: details.statusCode,
-      tabId: details.tabId
+      tabId: details.tabId,
+      rateHash: rateHashFor(details.url)
     });
   }
 }, { urls: ["https://chatgpt.com/backend-api/*"] });
@@ -102,6 +122,7 @@ chrome.webRequest.onErrorOccurred.addListener(details => {
     surface,
     method: details.method,
     error: details.error,
-    tabId: details.tabId
+    tabId: details.tabId,
+    rateHash: rateHashFor(details.url)
   });
 }, { urls: ["https://chatgpt.com/backend-api/*"] });

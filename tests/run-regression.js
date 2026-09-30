@@ -47,11 +47,14 @@ async function state(request){
 
 async function clearGuardCooldowns(page){
   await page.evaluate(()=>{
-    const prefix='chatgpt-429-guard:cooldown:';
+    const prefixes=[
+      'chatgpt-429-guard:cooldown:',
+      'chatgpt-429-guard:hard-cooldown:'
+    ];
     const remove=[];
     for(let i=0;i<localStorage.length;i++){
       const key=localStorage.key(i);
-      if(key&&key.startsWith(prefix)) remove.push(key);
+      if(key&&prefixes.some(prefix=>key.startsWith(prefix))) remove.push(key);
     }
     for(const key of remove) localStorage.removeItem(key);
   });
@@ -74,7 +77,7 @@ async function clearGuardCooldowns(page){
     ]
   });
   const page=context.pages()[0]||await context.newPage();
-  await page.goto(base+'/',{waitUntil:'domcontentloaded',timeout:10000});
+  await page.goto(base+'/',{waitUntil:'domcontentloaded',timeout:30000});
   const installed=await page.evaluate(()=>typeof __CGUARD_STATUS__==='function');
   if(!installed) throw new Error('guard_not_installed');
 
@@ -154,6 +157,21 @@ async function clearGuardCooldowns(page){
     networkCalls:st.counts['GET /backend-api/conversations/retry-after']||0
   });
 
+  await clearGuardCooldowns(page);
+  await reset(context.request);
+  t0=Date.now();
+  const uiBudget=await page.evaluate(async base=>(await fetch(
+    base+'/backend-api/conversations/ui-budget'
+  )).status,base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'ui_budget_transient_recovery',
+    status:uiBudget,
+    elapsedMs:Date.now()-t0,
+    networkCalls:st.counts['GET /backend-api/conversations/ui-budget']||0
+  });
+
+  await clearGuardCooldowns(page);
   await reset(context.request);
   t0=Date.now();
   const family=await page.evaluate(async base=>{
@@ -207,7 +225,7 @@ async function clearGuardCooldowns(page){
   }
   results.storage=worker
     ? await worker.evaluate(async()=>await chrome.storage.local.get([
-        'cguard_counts','cguard_last_event'
+        'cguard_counts','cguard_last_event','cguard_events'
       ]))
     : null;
   results.guardStatus=await page.evaluate(()=>__CGUARD_STATUS__());
@@ -219,14 +237,25 @@ async function clearGuardCooldowns(page){
     abort:byName.abort_during_backoff.networkCalls===1 && byName.abort_during_backoff.outcome.resolved===false,
     requestObject:byName.request_object.networkCalls===2 && byName.request_object.status===200,
     retryAfter:byName.retry_after_honored.networkCalls===2 && byName.retry_after_honored.status===200 && byName.retry_after_honored.elapsedMs>=14500,
+    uiBudget:byName.ui_budget_transient_recovery.networkCalls===3 &&
+      byName.ui_budget_transient_recovery.status===200 &&
+      byName.ui_budget_transient_recovery.elapsedMs<9000,
     globalCooldown:byName.different_conversations_share_cooldown.aCalls===2 &&
       byName.different_conversations_share_cooldown.bCalls===1 &&
       byName.different_conversations_share_cooldown.statuses.every(x=>x===200) &&
-      byName.different_conversations_share_cooldown.firstToSecondMs>=11000,
+      byName.different_conversations_share_cooldown.firstToSecondMs>=900 &&
+      byName.different_conversations_share_cooldown.firstToSecondMs<2500,
     killSwitch:byName.kill_switch.networkCalls===1 && byName.kill_switch.status===429,
     twoTabs:byName.two_tabs_same_conversation.networkCalls<=3 && byName.two_tabs_same_conversation.statuses.every(x=>x===200),
     networkTelemetry:(results.storage?.cguard_counts?.['network-429']||0)>=6,
-    globalCooldownMetric:(results.guardStatus?.metrics?.globalCooldownHits||0)>=1
+    rateHashTelemetry:(()=>{
+      const events=results.storage?.cguard_events||[];
+      const network=events.filter(e=>e.type==='network-429'&&e.rateHash);
+      const backoffs=events.filter(e=>e.type==='429-backoff'&&e.rateHash);
+      return network.some(n=>backoffs.some(b=>b.rateHash===n.rateHash));
+    })(),
+    globalCooldownMetric:(results.guardStatus?.metrics?.globalCooldownHits||0)>=1,
+    softCooldownCapMetric:(results.guardStatus?.metrics?.softCooldownCaps||0)>=1
   };
   results.checks=checks;
   results.pass=Object.values(checks).every(Boolean);
