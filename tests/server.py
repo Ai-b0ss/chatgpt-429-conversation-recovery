@@ -134,8 +134,7 @@ class H(BaseHTTPRequestHandler):
                 "resume-exhaust",
                 "resume-abort",
                 "resume-concurrent",
-                "resume-cross-tab",
-                "resume-detail-hydrate"
+                "resume-cross-tab"
             ):
                 return self.sendb(404,'{"detail":"resume target missing"}')
             if ident=="resume-nonstream":
@@ -156,7 +155,8 @@ class H(BaseHTTPRequestHandler):
             if ident in (
                 "resume-recover",
                 "resume-oldcomplete",
-                "resume-detail-fail"
+                "resume-detail-fail",
+                "resume-detail-hydrate"
             ) and offset!=1:
                 return self.sendb(404,'{"detail":"resume offset missing"}')
             if ident=="resume-absolute" and offset!=0:
@@ -166,7 +166,8 @@ class H(BaseHTTPRequestHandler):
                 "resume-recover",
                 "resume-oldcomplete",
                 "resume-absolute",
-                "resume-detail-fail"
+                "resume-detail-fail",
+                "resume-detail-hydrate"
             ):
                 stream=(
                     'data: {"p":"","o":"add","v":{"message":{"id":"a1","author":{"role":"assistant"},'
