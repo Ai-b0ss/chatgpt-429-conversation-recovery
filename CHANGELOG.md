@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.3 — Unreleased
+
+Production 429 recovery fix based on the 2026-10-05 live ChatGPT reproduction.
+
+- Reproduced a real chatgpt.com conversation-detail HTTP 429 in the browser and observed the server remain rate-limited for roughly 2.5 minutes.
+- Confirms the previous short retry budget could emit 429-final after only about six seconds, allowing ChatGPT React UI to latch into “This chat is unavailable” / «Не удалось загрузить этот разговор ChatGPT» while the server was still rate-limited.
+- Keeps safe production GET conversation-detail requests pending for a five-minute recovery window instead of exposing a transient 429 to the UI.
+- Uses sparse escalating backoff (2s → 4s → 8s → 15s → 30s → 45s → 60s), still honoring Retry-After, AbortSignal, deduplication, cross-tab coordination, and the kill switch.
+- Caps the long recovery by elapsed time; localhost regression behavior and unsafe/non-idempotent POST handling remain unchanged.
+- Removes the temporary production-canary load generator from the installed extension after the live reproduction.
+
 ## 0.9.2 — Unreleased
 
 Conversation-availability hardening after a confirmed real 429-backed recurrence that v0.8.4 did not prevent. This candidate also imports the separately developed local v0.9.0 bounded lost-stream resume-recovery layer so GitHub source matches the actually installed feature set.

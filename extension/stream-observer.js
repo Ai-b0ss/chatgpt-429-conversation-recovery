@@ -1,4 +1,4 @@
-// ChatGPT Stream Resume Recovery v0.9.2.
+// ChatGPT Stream Resume Recovery v0.9.3.
 // Passive observation plus bounded active resume-404 recovery; extension kill switch applies.
 (() => {
   if (window.__CGUARD_STREAM_OBSERVER_INSTALLED__) return;

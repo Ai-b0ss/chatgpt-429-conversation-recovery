@@ -5,9 +5,9 @@ Unofficial browser-side resilience and diagnostics for ChatGPT conversations tha
 Common UI wording includes “This chat is unavailable”, “Chat unavailable”, and «Этот чат недоступен».
 
 **Latest published release:** ChatGPT 429 Guard v0.8.4.
-**Current development candidate:** Conversation Availability Guard v0.9.2.
+**Current development candidate:** Conversation Availability Guard v0.9.3.
 
-v0.8.4 reduced duplicate conversation reads and recovered several deterministic transient-429 scenarios, but it did **not** prevent a real confirmed 429-backed recurrence after prolonged ordinary ChatGPT use. A local v0.9.0 build later added bounded lost-stream resume recovery without changing the v0.8.4 429 Guard itself. The exact request surface that triggered the real 429 failure was not captured. v0.9.2 combines that stream-recovery layer with broader safe GET 429 coverage and stronger diagnostics instead of claiming the problem is universally solved.
+v0.8.4 reduced duplicate conversation reads and recovered several deterministic transient-429 scenarios, but it did **not** prevent a real confirmed 429-backed recurrence after prolonged ordinary ChatGPT use. A local v0.9.0 build later added bounded lost-stream resume recovery without changing the v0.8.4 429 Guard itself. A 2026-10-05 production reproduction then identified the critical surface directly: GET conversation-detail returned real HTTP 429 responses with no Retry-After, while the server remained rate-limited for roughly 2.5 minutes. v0.9.3 therefore keeps that safe production GET pending in a bounded five-minute sparse-retry window instead of exposing the early 429 to React.
 
 > This project does **not** bypass OpenAI rate limits or subscription limits. It only reduces unnecessary client-side retry pressure, respects server Retry-After, and tries to keep transient conversation-read failures from immediately degrading the UI.
 
@@ -15,7 +15,7 @@ v0.8.4 reduced duplicate conversation reads and recovered several deterministic 
 
 A captured failure showed one conversation being fetched 34 times: 4 successful reads followed by 30 HTTP 429 responses roughly 5.3 seconds apart. That looked like a client recovery loop adding pressure while the backend was already rate-limiting.
 
-A later real-world recurrence showed that v0.8.4 was still incomplete: ChatGPT again reached “This chat is unavailable” after prolonged normal use with HTTP 429 involved. That means the old three-endpoint protection set was not sufficient evidence of a complete fix.
+A later real-world recurrence showed that v0.8.4 was still incomplete: ChatGPT again reached “This chat is unavailable” after prolonged normal use with HTTP 429 involved. On 2026-10-05 the failure was reproduced against chatgpt.com: conversation-detail began returning 429, the old short budget emitted 429-final about six seconds later, and the backend did not recover until roughly 2.5 minutes after rate limiting began.
 
 The current approach is conservative:
 
@@ -23,11 +23,11 @@ The current approach is conservative:
 - deduplicate identical concurrent reads;
 - coordinate cooldowns across tabs;
 - honor Retry-After;
-- stop internal retries after a bounded budget;
+- keep production conversation-detail recovery bounded by a five-minute elapsed-time window with sparse backoff;
 - observe related POST failures without replaying them;
 - keep a small local, privacy-filtered event history so the next real failure identifies the request surface.
 
-## What v0.9.2 actively protects
+## What v0.9.3 actively protects
 
 Traffic-changing protection is limited to safe GET requests:
 
@@ -36,7 +36,7 @@ Traffic-changing protection is limited to safe GET requests:
 - GET /backend-api/conversation/{id}/stream_status
 - GET /backend-api/conversations
 
-Active 429 protection for stream_status is new in v0.9.2. The local v0.9.0 stream-recovery layer could observe stream status for resume recovery, but the underlying 429 Guard still let a stream_status 429 pass through without retrying it.
+Active 429 protection for stream_status is new in v0.9.3. The local v0.9.0 stream-recovery layer could observe stream status for resume recovery, but the underlying 429 Guard still let a stream_status 429 pass through without retrying it.
 
 Related POST surfaces such as:
 
@@ -50,7 +50,7 @@ Message sending, uploads, model requests and unrelated ChatGPT traffic are not m
 
 ## Measured behavior
 
-These are deterministic local recovery simulations, not a promise about every production 429.
+The local rows are deterministic recovery simulations. The final row records the live 2026-10-05 production reproduction; it is evidence for this failure mode, not a promise about every possible ChatGPT outage.
 
 | Scenario | Result |
 |---|---:|
@@ -60,7 +60,7 @@ These are deterministic local recovery simulations, not a promise about every pr
 | Retry-After: 14 | second attempt waits for the server-directed delay |
 | resume / batch / init POST 429 | one call only; observed, not replayed |
 | Cross-tab same-conversation reads | serialized/deduplicated |
-| Copied/stored diagnostics | no full URLs, conversation IDs, tab IDs or correlation hashes |
+| Copied/stored diagnostics | no full URLs, conversation IDs, tab IDs or correlation hashes |\n| Live chatgpt.com conversation-detail 429 | old budget failed in ~6s; server recovered after ~2.5 min; v0.9.3 window is 5 min |
 
 ## Install
 
@@ -76,7 +76,7 @@ For a published build:
 
 Chrome must keep that folder in place while the unpacked extension is installed.
 
-For the unreleased v0.9.2 development candidate, use the reviewed development branch only after both the 429 and stream-recovery regression suites pass and it is intentionally published.
+For the unreleased v0.9.3 development candidate, use the reviewed development branch only after both the 429 and stream-recovery regression suites pass and it is intentionally published.
 
 ## Using it
 
