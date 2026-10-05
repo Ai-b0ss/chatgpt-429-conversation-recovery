@@ -53,6 +53,18 @@ class H(BaseHTTPRequestHandler):
         if path=="/backend-api/conversation/recovery-test/stream_status":
             bump(path,"GET")
             return self.sendb(200,'{"status":"IS_STREAMING"}')
+        if path=="/backend-api/conversation/empty-204/stream_status":
+            bump(path,"GET")
+            return self.sendb(204,'')
+        if path=="/backend-api/conversation/empty-200/stream_status":
+            bump(path,"GET")
+            return self.sendb(200,'')
+        if path=="/backend-api/conversation/malformed-status/stream_status":
+            bump(path,"GET")
+            return self.sendb(200,'not-json',ctype="text/plain")
+        if path=="/backend-api/conversation/repeat-status/stream_status":
+            bump(path,"GET")
+            return self.sendb(200,'{"status":"COMPLETE"}')
         if path.startswith("/backend-api/conversations/"):
             ident=path.rsplit("/",1)[-1]
             n=bump(path,"GET")

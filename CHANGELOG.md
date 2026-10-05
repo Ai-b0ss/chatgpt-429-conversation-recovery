@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.1 — Unreleased
+## 0.9.2 — Unreleased
 
 Conversation-availability hardening after a confirmed real 429-backed recurrence that v0.8.4 did not prevent. This candidate also imports the separately developed local v0.9.0 bounded lost-stream resume-recovery layer so GitHub source matches the actually installed feature set.
 
@@ -12,7 +12,9 @@ Conversation-availability hardening after a confirmed real 429-backed recurrence
 - Removes tab IDs, correlation hashes, full URLs and conversation identifiers from stored/exported diagnostics.
 - Expands Copy safe diagnostics from one last event to the recent bounded event sequence needed to classify the next real recurrence.
 - Adds deterministic regression coverage for stream-status 429 recovery, terminal 429 escape diagnostics, passive POST 429s, diagnostic privacy, and the inherited resume-404 recovery path.
-- Documents that v0.9.1 is a development candidate, not a universal cure, until another real recurrence identifies the production failure surface.
+- Fixes a live-runtime diagnostic flood where normal empty/204 stream-status responses were counted as JSON parse errors roughly every polling interval; empty 2xx responses are now benign, repeated status observations emit only on transitions, and malformed non-empty payload events are rate-limited.
+- Adds regression coverage for empty 204/200 stream-status responses, repeated identical statuses, and malformed-payload event throttling.
+- Documents that v0.9.2 is a development candidate, not a universal cure, until another real recurrence identifies the production failure surface.
 
 ## 0.8.4 — 2026-09-30
 

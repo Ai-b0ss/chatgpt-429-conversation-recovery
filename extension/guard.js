@@ -1,4 +1,4 @@
-// ChatGPT Conversation Availability Guard v0.9.1
+// ChatGPT Conversation Availability Guard v0.9.2
 // Mitigates transient conversation-read HTTP 429 failures; it does not bypass rate limits.
 (() => {
   if (window.__CGUARD_INSTALLED__) return;
@@ -29,7 +29,7 @@
   const hardCooldownStoragePrefix = "chatgpt-429-guard:hard-cooldown:";
 
   const metrics = {
-    version: "0.9.1",
+    version: "0.9.2",
     installedAt: new Date().toISOString(),
     protectedCalls: 0,
     nativeCalls: 0,
