@@ -191,6 +191,38 @@ async function clearGuardCooldowns(page){
     networkCalls:st.counts['GET /backend-api/conversation/stream-status-test/stream_status']||0
   });
 
+  const streamNoise=await page.evaluate(async base=>{
+    const before={...__CGUARD_STREAM_STATUS__().metrics};
+    const events=[];
+    const onEvent=e=>{ try{events.push(JSON.parse(e.detail));}catch{} };
+    window.addEventListener('__cguard_event__',onEvent);
+    const paths=[
+      '/backend-api/conversation/empty-204/stream_status',
+      '/backend-api/conversation/empty-200/stream_status',
+      '/backend-api/conversation/malformed-status/stream_status',
+      '/backend-api/conversation/malformed-status/stream_status',
+      '/backend-api/conversation/malformed-status/stream_status',
+      '/backend-api/conversation/repeat-status/stream_status',
+      '/backend-api/conversation/repeat-status/stream_status',
+      '/backend-api/conversation/repeat-status/stream_status'
+    ];
+    const statuses=[];
+    for(const path of paths) statuses.push((await fetch(base+path)).status);
+    await new Promise(r=>setTimeout(r,150));
+    window.removeEventListener('__cguard_event__',onEvent);
+    const after={...__CGUARD_STREAM_STATUS__().metrics};
+    return {
+      statuses,
+      emptyDelta:(after.streamStatusEmpty||0)-(before.streamStatusEmpty||0),
+      parseDelta:(after.parseErrors||0)-(before.parseErrors||0),
+      observedDelta:(after.streamStatusObserved||0)-(before.streamStatusObserved||0),
+      transitionDelta:(after.streamStatusTransitions||0)-(before.streamStatusTransitions||0),
+      parseEvents:events.filter(e=>e.type==='stream-status-parse-error').length,
+      observedEvents:events.filter(e=>e.type==='stream-status-observed').length
+    };
+  },base);
+  results.tests.push({name:'stream_status_noise_control',...streamNoise});
+
   await clearGuardCooldowns(page);
   await reset(context.request);
   await page.evaluate(async base=>{
@@ -324,6 +356,13 @@ async function clearGuardCooldowns(page){
     streamStatus:byName.stream_status_transient_recovery.networkCalls===2 &&
       byName.stream_status_transient_recovery.status===200 &&
       byName.stream_status_transient_recovery.elapsedMs<9000,
+    streamStatusNoiseControl:byName.stream_status_noise_control.statuses.join(',')==='204,200,200,200,200,200,200,200' &&
+      byName.stream_status_noise_control.emptyDelta===2 &&
+      byName.stream_status_noise_control.parseDelta===3 &&
+      byName.stream_status_noise_control.observedDelta===3 &&
+      byName.stream_status_noise_control.transitionDelta===1 &&
+      byName.stream_status_noise_control.parseEvents===1 &&
+      byName.stream_status_noise_control.observedEvents===1,
     resume404Recovery:byName.resume_404_recovery.networkCalls===2 &&
       byName.resume_404_recovery.streamStatusCalls===1 &&
       byName.resume_404_recovery.status===200 &&

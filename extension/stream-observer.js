@@ -1,4 +1,4 @@
-// ChatGPT Stream Resume Recovery v0.9.1.
+// ChatGPT Stream Resume Recovery v0.9.2.
 // Passive observation plus bounded active resume-404 recovery; extension kill switch applies.
 (() => {
   if (window.__CGUARD_STREAM_OBSERVER_INSTALLED__) return;
@@ -26,6 +26,8 @@
   const recoveryMaxAttempts = recoveryOffsetCandidates.length;
   const guardDisableKey = "chatgpt-429-guard:disable";
   let recoveryEnabled = true;
+  let lastStreamStatusParseErrorEmitAt = 0;
+  const streamStatusParseErrorEventIntervalMs = 5 * 60 * 1000;
   const recoveryActive = () => {
     if (!recoveryEnabled) return false;
     try { return localStorage.getItem(guardDisableKey) !== "1"; }
@@ -34,6 +36,8 @@
   const metrics = {
     installedAt: new Date().toISOString(),
     streamStatusObserved: 0,
+    streamStatusEmpty: 0,
+    streamStatusTransitions: 0,
     streamingObserved: 0,
     resumeObserved: 0,
     resume404: 0,
@@ -352,20 +356,46 @@
 
   const rememberStreamStatus = async (response, conversationId) => {
     if (!response || !conversationId || !response.ok) return;
+    if (response.status === 204 || response.status === 205) {
+      metrics.streamStatusEmpty++;
+      return;
+    }
+
+    let raw = "";
     try {
-      const payload = await response.json();
-      const status = typeof payload?.status === "string"
-        ? payload.status.slice(0, 64)
-        : "unknown";
+      raw = await response.text();
+    } catch {
+      metrics.parseErrors++;
+      return;
+    }
+    if (!raw.trim()) {
+      metrics.streamStatusEmpty++;
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(raw);
+      const rawStatus = typeof payload?.status === "string"
+        ? payload.status
+        : (typeof payload?.stream_status === "string" ? payload.stream_status : "unknown");
+      const status = rawStatus.slice(0, 64);
       const at = Date.now();
+      const previousStatus = streamStatusByConversation.get(conversationId)?.status || null;
       streamStatusByConversation.set(conversationId, { status, at });
       metrics.streamStatusObserved++;
       if (status === "IS_STREAMING") metrics.streamingObserved++;
-      emit("stream-status-observed", { status });
+      if (status !== previousStatus) {
+        metrics.streamStatusTransitions++;
+        emit("stream-status-observed", { status });
+      }
       cleanState();
     } catch {
       metrics.parseErrors++;
-      emit("stream-status-parse-error");
+      const now = Date.now();
+      if (now - lastStreamStatusParseErrorEmitAt >= streamStatusParseErrorEventIntervalMs) {
+        lastStreamStatusParseErrorEmitAt = now;
+        emit("stream-status-parse-error", { status: response.status });
+      }
     }
   };
 
