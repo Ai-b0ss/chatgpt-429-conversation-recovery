@@ -45,6 +45,26 @@ class H(BaseHTTPRequestHandler):
         if path=="/backend-api/models":
             bump(path,"GET")
             return self.sendb(429,'{"detail":"models limited"}')
+        if path=="/backend-api/conversation/stream-status-test/stream_status":
+            n=bump(path,"GET")
+            if n==1:
+                return self.sendb(429,'{"detail":"stream status limited"}')
+            return self.sendb(200,'{"ok":true,"stream_status":"ready"}')
+        if path=="/backend-api/conversation/recovery-test/stream_status":
+            bump(path,"GET")
+            return self.sendb(200,'{"status":"IS_STREAMING"}')
+        if path=="/backend-api/conversation/empty-204/stream_status":
+            bump(path,"GET")
+            return self.sendb(204,'')
+        if path=="/backend-api/conversation/empty-200/stream_status":
+            bump(path,"GET")
+            return self.sendb(200,'')
+        if path=="/backend-api/conversation/malformed-status/stream_status":
+            bump(path,"GET")
+            return self.sendb(200,'not-json',ctype="text/plain")
+        if path=="/backend-api/conversation/repeat-status/stream_status":
+            bump(path,"GET")
+            return self.sendb(200,'{"status":"COMPLETE"}')
         if path.startswith("/backend-api/conversations/"):
             ident=path.rsplit("/",1)[-1]
             n=bump(path,"GET")
@@ -71,7 +91,24 @@ class H(BaseHTTPRequestHandler):
         parsed=urllib.parse.urlparse(self.path)
         path=parsed.path
         bump(path,"POST")
-        if path.startswith("/backend-api/conversations/"):
+        length=int(self.headers.get("Content-Length","0") or 0)
+        raw=self.rfile.read(length) if length else b""
+        body=None
+        if raw:
+            try: body=json.loads(raw.decode("utf-8"))
+            except Exception: body=None
+        if path=="/backend-api/f/conversation/resume" and isinstance(body,dict) and body.get("conversation_id")=="recovery-test":
+            offset=body.get("offset",0)
+            if offset==0:
+                return self.sendb(404,'{"detail":"resume not ready"}')
+            if offset==1:
+                sse='data: {"type":"resume_conversation_token"}\n\ndata: [DONE]\n\n'
+                return self.sendb(200,sse,ctype="text/event-stream")
+            return self.sendb(404,'{"detail":"resume offset missing"}')
+        if (path.startswith("/backend-api/conversations/") or
+            path in ("/backend-api/f/conversation/resume",
+                     "/backend-api/conversations/batch",
+                     "/backend-api/conversation/init")):
             return self.sendb(429,'{"detail":"post limited"}')
         return self.sendb(200,'{"ok":true}')
 

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.9.3 — Unreleased
+
+Production 429 recovery fix based on the 2026-10-05 live ChatGPT reproduction.
+
+- Reproduced a real chatgpt.com conversation-detail HTTP 429 in the browser and observed the server remain rate-limited for roughly 2.5 minutes.
+- Confirms the previous short retry budget could emit 429-final after only about six seconds, allowing ChatGPT React UI to latch into “This chat is unavailable” / «Не удалось загрузить этот разговор ChatGPT» while the server was still rate-limited.
+- Keeps safe production GET conversation-detail requests pending for a five-minute recovery window instead of exposing a transient 429 to the UI.
+- Uses sparse escalating backoff (2s → 4s → 8s → 15s → 30s → 45s → 60s), still honoring Retry-After, AbortSignal, deduplication, cross-tab coordination, and the kill switch.
+- Caps the long recovery by elapsed time; localhost regression behavior and unsafe/non-idempotent POST handling remain unchanged.
+- Removes the temporary production-canary load generator from the installed extension after the live reproduction.
+- Adds a permanent production-origin long-recovery regression: 45 seconds of intercepted 429s on `https://chatgpt.com`, no early `429-final`, then recovery of the original fetch to HTTP 200.
+
+## 0.9.2 — Unreleased
+
+Conversation-availability hardening after a confirmed real 429-backed recurrence that v0.8.4 did not prevent. This candidate also imports the separately developed local v0.9.0 bounded lost-stream resume-recovery layer so GitHub source matches the actually installed feature set.
+
+- Renames the product-facing extension from ChatGPT 429 Guard to ChatGPT Conversation Availability Guard while keeping the remote repository name unchanged.
+- Imports stream-observer.js from the local v0.9.0 build without broadening its existing resume-404 recovery policy.
+- Adds active protection for GET /backend-api/conversation/{id}/stream_status; the local v0.9.0 observer could inspect this surface but the underlying 429 Guard still passed its 429 responses through.
+- Keeps resume, batch and init POST 429s diagnostic-only; automatic generic replay remains forbidden because idempotence is not proven. The separate stream-resume module only performs its narrowly validated resume-404 recovery flow.
+- Stores a bounded, privacy-filtered event history with 429 and stream-recovery surface/status/timing fields.
+- Removes tab IDs, correlation hashes, full URLs and conversation identifiers from stored/exported diagnostics.
+- Expands Copy safe diagnostics from one last event to the recent bounded event sequence needed to classify the next real recurrence.
+- Adds deterministic regression coverage for stream-status 429 recovery, terminal 429 escape diagnostics, passive POST 429s, diagnostic privacy, and the inherited resume-404 recovery path.
+- Fixes a live-runtime diagnostic flood where normal empty/204 stream-status responses were counted as JSON parse errors roughly every polling interval; empty 2xx responses are now benign, repeated status observations emit only on transitions, and malformed non-empty payload events are rate-limited.
+- Adds regression coverage for empty 204/200 stream-status responses, repeated identical statuses, and malformed-payload event throttling.
+- Migrates legacy no-status stream-status parse-error spam out of the bounded event history while preserving meaningful events such as terminal 429s.
+- Documents that v0.9.2 is a development candidate, not a universal cure, until another real recurrence identifies the production failure surface.
+
 ## 0.8.4 — 2026-09-30
 
 Live 429/UI-timeout fix based on a real browser failure capture.
