@@ -3,8 +3,22 @@ let writeChain = Promise.resolve();
 const SAFE_EVENT_KEYS = new Set([
   "ts", "type", "surface", "method", "status", "protection", "source",
   "attempt", "waitMs", "retryAfterMs", "cooldownMs", "elapsedMs",
-  "scope", "capped", "rawWaitMs", "error"
+  "scope", "capped", "rawWaitMs", "error",
+  "reason", "outcome", "statusAgeMs", "offset", "attempts",
+  "messageStreamComplete", "done", "finalAssistant", "handoff",
+  "resumeTokenSeen", "streamingSeen", "completedSinceRequest",
+  "aborted", "afterResume404", "recoveryEnabled", "recoveryActive"
 ]);
+const SAFE_NUMBER_KEYS = new Set([
+  "attempt", "waitMs", "retryAfterMs", "cooldownMs", "elapsedMs",
+  "rawWaitMs", "statusAgeMs", "offset", "attempts"
+]);
+const SAFE_BOOLEAN_KEYS = new Set([
+  "capped", "messageStreamComplete", "done", "finalAssistant", "handoff",
+  "resumeTokenSeen", "streamingSeen", "completedSinceRequest",
+  "aborted", "afterResume404", "recoveryEnabled", "recoveryActive"
+]);
+const SAFE_ENUM_KEYS = new Set(["reason", "outcome"]);
 
 function sanitizeEvent(event) {
   if (!event || typeof event !== "object") return null;
@@ -12,19 +26,36 @@ function sanitizeEvent(event) {
   for (const key of SAFE_EVENT_KEYS) {
     if (!(key in event)) continue;
     const value = event[key];
-    if (["attempt", "waitMs", "retryAfterMs", "cooldownMs", "elapsedMs", "rawWaitMs", "status"].includes(key)) {
+
+    if (SAFE_NUMBER_KEYS.has(key)) {
       if (Number.isFinite(value) && value >= 0) safe[key] = value;
       continue;
     }
-    if (key === "capped") {
+    if (SAFE_BOOLEAN_KEYS.has(key)) {
       if (typeof value === "boolean") safe[key] = value;
       continue;
     }
-    if (typeof value !== "string") continue;
-    if (key === "error") {
-      if (/^net::[A-Z0-9_]+$/.test(value)) safe[key] = value;
+    if (key === "status") {
+      if (Number.isFinite(value) && value >= 0 && value <= 999) {
+        safe[key] = value;
+      } else if (typeof value === "string" && /^[A-Z0-9_-]{1,64}$/.test(value)) {
+        safe[key] = value;
+      }
       continue;
     }
+    if (key === "error") {
+      if (typeof value === "string" && /^net::[A-Z0-9_]+$/.test(value)) {
+        safe[key] = value;
+      }
+      continue;
+    }
+    if (SAFE_ENUM_KEYS.has(key)) {
+      if (typeof value === "string" && /^[A-Za-z0-9._-]{1,80}$/.test(value)) {
+        safe[key] = value;
+      }
+      continue;
+    }
+    if (typeof value !== "string") continue;
     safe[key] = value.slice(0, 120);
   }
   if (!safe.ts) safe.ts = new Date().toISOString();

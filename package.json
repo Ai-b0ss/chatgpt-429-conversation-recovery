@@ -1,6 +1,6 @@
 {
   "name": "chatgpt-conversation-availability-guard",
-  "version": "0.8.5",
+  "version": "0.9.1",
   "private": true,
   "description": "Regression tests for the ChatGPT Conversation Availability Guard browser extension",
   "scripts": {

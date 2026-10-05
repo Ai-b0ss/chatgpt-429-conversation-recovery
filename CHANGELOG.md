@@ -1,17 +1,18 @@
 # Changelog
 
-## 0.8.5 — Unreleased
+## 0.9.1 — Unreleased
 
-Conversation-availability hardening after a confirmed real 429-backed recurrence that v0.8.4 did not prevent.
+Conversation-availability hardening after a confirmed real 429-backed recurrence that v0.8.4 did not prevent. This candidate also imports the separately developed local v0.9.0 bounded lost-stream resume-recovery layer so GitHub source matches the actually installed feature set.
 
 - Renames the product-facing extension from ChatGPT 429 Guard to ChatGPT Conversation Availability Guard while keeping the remote repository name unchanged.
-- Adds active protection for GET /backend-api/conversation/{id}/stream_status, which v0.8.4 only observed passively.
-- Keeps resume, batch and init POST surfaces diagnostic-only; they are not automatically replayed because idempotence is not proven.
-- Stores a bounded, privacy-filtered event history with surface, method, status, protection mode and timing/backoff fields.
+- Imports stream-observer.js from the local v0.9.0 build without broadening its existing resume-404 recovery policy.
+- Adds active protection for GET /backend-api/conversation/{id}/stream_status; the local v0.9.0 observer could inspect this surface but the underlying 429 Guard still passed its 429 responses through.
+- Keeps resume, batch and init POST 429s diagnostic-only; automatic generic replay remains forbidden because idempotence is not proven. The separate stream-resume module only performs its narrowly validated resume-404 recovery flow.
+- Stores a bounded, privacy-filtered event history with 429 and stream-recovery surface/status/timing fields.
 - Removes tab IDs, correlation hashes, full URLs and conversation identifiers from stored/exported diagnostics.
 - Expands Copy safe diagnostics from one last event to the recent bounded event sequence needed to classify the next real recurrence.
-- Adds deterministic regression coverage for stream-status recovery, passive POST 429s and diagnostic privacy.
-- Documents that v0.8.5 is a development candidate, not a universal cure, until another real recurrence identifies the production failure surface.
+- Adds deterministic regression coverage for stream-status 429 recovery, terminal 429 escape diagnostics, passive POST 429s, diagnostic privacy, and the inherited resume-404 recovery path.
+- Documents that v0.9.1 is a development candidate, not a universal cure, until another real recurrence identifies the production failure surface.
 
 ## 0.8.4 — 2026-09-30
 

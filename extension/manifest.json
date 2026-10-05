@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT Conversation Availability Guard",
-  "version": "0.8.5",
+  "version": "0.9.1",
   "description": "Mitigates transient HTTP 429 failures on ChatGPT conversation reads and captures safe diagnostics for chat-unavailable failures. Unofficial.",
   "permissions": ["storage", "webRequest"],
   "background": {
@@ -15,7 +15,7 @@
     },
     {
       "matches": ["https://chatgpt.com/*"],
-      "js": ["guard.js", "control.js"],
+      "js": ["guard.js", "stream-observer.js", "control.js"],
       "run_at": "document_start",
       "world": "MAIN"
     }
