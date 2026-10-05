@@ -1,5 +1,5 @@
-// ChatGPT 429 Guard v0.8.4
-// Reduces duplicate conversation reads after HTTP 429; it does not bypass rate limits.
+// ChatGPT Conversation Availability Guard v0.8.5
+// Mitigates transient conversation-read HTTP 429 failures; it does not bypass rate limits.
 (() => {
   if (window.__CGUARD_INSTALLED__) return;
   window.__CGUARD_INSTALLED__ = true;
@@ -29,7 +29,7 @@
   const hardCooldownStoragePrefix = "chatgpt-429-guard:hard-cooldown:";
 
   const metrics = {
-    version: "0.8.4",
+    version: "0.8.5",
     installedAt: new Date().toISOString(),
     protectedCalls: 0,
     nativeCalls: 0,
@@ -294,6 +294,15 @@
       };
     }
 
+    match = path.match(/^\/backend-api\/conversation\/([^/?]+)\/stream_status$/);
+    if (match) {
+      return {
+        requestKey: info.url.href,
+        rateKey: "conversation:" + match[1],
+        surface: "stream-status",
+      };
+    }
+
     if (path === "/backend-api/conversations") {
       return {
         requestKey: info.url.href,
@@ -403,8 +412,7 @@
         waitMs: ms,
         scope: familyHardUntil > ownHardUntil
           ? "conversation-family-hard"
-          : "request-hard",
-        rateHash: hashKey(key)
+          : "request-hard"
       });
       await sleep(ms, signal);
       return;
@@ -423,8 +431,7 @@
       capped: ms < rawMs,
       scope: familyUntil > ownUntil
         ? "conversation-family-soft"
-        : "request-soft",
-      rateHash: hashKey(key)
+        : "request-soft"
     });
     await sleep(ms, signal);
   }
@@ -463,13 +470,17 @@
         if (response.status !== 429) {
           clearCooldown(key);
           failureLevel.delete(key);
-          if (saw429) metrics.successAfter429++;
-          log("response", {
-            surface,
-            status: response.status,
-            elapsedMs: elapsed,
-            attempt
-          });
+          if (saw429) {
+            metrics.successAfter429++;
+            log("429-recovered", {
+              surface,
+              method: "GET",
+              status: response.status,
+              protection: "active",
+              elapsedMs: elapsed,
+              attempt
+            });
+          }
           return response;
         }
 
@@ -496,11 +507,13 @@
         metrics.totalWaitMs += wait;
         log("429-backoff", {
           surface,
+          method: "GET",
+          status: 429,
+          protection: "active",
           elapsedMs: elapsed,
           attempt,
           waitMs: wait,
-          retryAfterMs: serverWait,
-          rateHash: hashKey(key)
+          retryAfterMs: serverWait
         });
         await sleep(wait, signal);
       }
@@ -515,8 +528,10 @@
       applyRateCooldown(key, terminalUntil);
       log("429-final", {
         surface,
-        cooldownMs: terminalCooldownMs,
-        rateHash: hashKey(key)
+        method: "GET",
+        status: 429,
+        protection: "active",
+        cooldownMs: terminalCooldownMs
       });
       return lastResponse;
     } catch (error) {
@@ -528,8 +543,7 @@
           applyRateCooldown(key, abortUntil);
           log("aborted-after-429", {
             surface,
-            cooldownMs: abortCooldownMs,
-            rateHash: hashKey(key)
+            cooldownMs: abortCooldownMs
           });
         } else {
           log("aborted-before-response", { surface });
@@ -585,6 +599,7 @@
 
     if (!protectedRequest) {
       const kind = passiveKind(input, init);
+      const info = requestInfo(input, init);
       const task = nativeFetch(input, init);
       if (!kind) return task;
       return task.then(response => {
@@ -592,7 +607,12 @@
           metrics.passive429++;
           metrics.passive429BySurface[kind] =
             (metrics.passive429BySurface[kind] || 0) + 1;
-          log("passive-429", { surface: kind });
+          log("passive-429", {
+            surface: kind,
+            method: info?.method || null,
+            status: 429,
+            protection: "passive"
+          });
         } else if (response.status >= 400) {
           metrics.passiveErrors++;
           const errorKey = kind + ":" + response.status;
@@ -600,7 +620,9 @@
             (metrics.passiveErrorsBySurface[errorKey] || 0) + 1;
           log("passive-error", {
             surface: kind,
-            status: response.status
+            method: info?.method || null,
+            status: response.status,
+            protection: "passive"
           });
         }
         return response;

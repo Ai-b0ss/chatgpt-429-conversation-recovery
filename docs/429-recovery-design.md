@@ -20,11 +20,11 @@ The guard does not attempt to evade or bypass server-side limits. It changes onl
 
 ## Protected surfaces
 
-Only GET conversation reads and the conversation list are actively protected. Stream-status, init, resume and other related requests may be observed for diagnostics but are not throttled by this variant.
+Active protection is limited to safe GET conversation reads, the conversation list, and GET stream-status. Related POST surfaces such as init, resume and batch are observed for diagnostics but are not automatically replayed unless idempotence is proven.
 
 ## Privacy
 
-Diagnostic events contain event type, surface, status, timing and tab metadata. They do not contain conversation text, response bodies, cookies, complete request URLs or conversation IDs.
+Diagnostic events contain only a bounded allowlist such as event type, endpoint surface, method/status, protection mode and timing/backoff fields. They do not contain conversation text, request/response bodies, cookies, authorization data, complete request URLs, conversation IDs, tab IDs or correlation hashes.
 
 ## Failure model
 

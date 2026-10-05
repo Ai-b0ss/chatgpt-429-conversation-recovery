@@ -45,6 +45,11 @@ class H(BaseHTTPRequestHandler):
         if path=="/backend-api/models":
             bump(path,"GET")
             return self.sendb(429,'{"detail":"models limited"}')
+        if path=="/backend-api/conversation/stream-status-test/stream_status":
+            n=bump(path,"GET")
+            if n==1:
+                return self.sendb(429,'{"detail":"stream status limited"}')
+            return self.sendb(200,'{"ok":true,"stream_status":"ready"}')
         if path.startswith("/backend-api/conversations/"):
             ident=path.rsplit("/",1)[-1]
             n=bump(path,"GET")
@@ -71,7 +76,10 @@ class H(BaseHTTPRequestHandler):
         parsed=urllib.parse.urlparse(self.path)
         path=parsed.path
         bump(path,"POST")
-        if path.startswith("/backend-api/conversations/"):
+        if (path.startswith("/backend-api/conversations/") or
+            path in ("/backend-api/f/conversation/resume",
+                     "/backend-api/conversations/batch",
+                     "/backend-api/conversation/init")):
             return self.sendb(429,'{"detail":"post limited"}')
         return self.sendb(200,'{"ok":true}')
 

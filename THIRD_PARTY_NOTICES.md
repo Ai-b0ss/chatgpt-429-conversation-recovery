@@ -1,6 +1,6 @@
 # Third-party notices and research references
 
-ChatGPT Stream Recovery is MIT-licensed. The current ChatGPT 429 Guard implementation does not bundle third-party libraries at runtime.
+ChatGPT Conversation Availability Guard is MIT-licensed. The current extension does not bundle third-party libraries at runtime.
 
 During v0.8.2 hardening, the following MIT-licensed projects were reviewed as engineering references:
 

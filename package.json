@@ -1,8 +1,8 @@
 {
-  "name": "chatgpt-stream-recovery",
-  "version": "0.8.4",
+  "name": "chatgpt-conversation-availability-guard",
+  "version": "0.8.5",
   "private": true,
-  "description": "Regression tests for the ChatGPT 429 Guard browser extension",
+  "description": "Regression tests for the ChatGPT Conversation Availability Guard browser extension",
   "scripts": {
     "test": "node tests/run-regression.js"
   },
