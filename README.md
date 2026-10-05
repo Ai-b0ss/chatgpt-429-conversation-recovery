@@ -5,9 +5,9 @@ Unofficial browser-side resilience and diagnostics for ChatGPT conversations tha
 Common UI wording includes “This chat is unavailable”, “Chat unavailable”, and «Этот чат недоступен».
 
 **Latest published release:** ChatGPT 429 Guard v0.8.4.
-**Current development candidate:** Conversation Availability Guard v0.8.5.
+**Current development candidate:** Conversation Availability Guard v0.9.1.
 
-v0.8.4 reduced duplicate conversation reads and recovered several deterministic transient-429 scenarios, but it did **not** prevent a real confirmed 429-backed recurrence after prolonged ordinary ChatGPT use. The exact request surface that triggered that real failure was not captured. v0.8.5 therefore expands safe GET coverage and diagnostics instead of claiming the problem is universally solved.
+v0.8.4 reduced duplicate conversation reads and recovered several deterministic transient-429 scenarios, but it did **not** prevent a real confirmed 429-backed recurrence after prolonged ordinary ChatGPT use. A local v0.9.0 build later added bounded lost-stream resume recovery without changing the v0.8.4 429 Guard itself. The exact request surface that triggered the real 429 failure was not captured. v0.9.1 combines that stream-recovery layer with broader safe GET 429 coverage and stronger diagnostics instead of claiming the problem is universally solved.
 
 > This project does **not** bypass OpenAI rate limits or subscription limits. It only reduces unnecessary client-side retry pressure, respects server Retry-After, and tries to keep transient conversation-read failures from immediately degrading the UI.
 
@@ -27,7 +27,7 @@ The current approach is conservative:
 - observe related POST failures without replaying them;
 - keep a small local, privacy-filtered event history so the next real failure identifies the request surface.
 
-## What v0.8.5 actively protects
+## What v0.9.1 actively protects
 
 Traffic-changing protection is limited to safe GET requests:
 
@@ -36,7 +36,7 @@ Traffic-changing protection is limited to safe GET requests:
 - GET /backend-api/conversation/{id}/stream_status
 - GET /backend-api/conversations
 
-The stream_status route is new in v0.8.5. It was already visible to passive network telemetry in v0.8.4 but was not protected, so a 429 there could be observed without being delayed/retried by the Guard.
+Active 429 protection for stream_status is new in v0.9.1. The local v0.9.0 stream-recovery layer could observe stream status for resume recovery, but the underlying 429 Guard still let a stream_status 429 pass through without retrying it.
 
 Related POST surfaces such as:
 
@@ -76,7 +76,7 @@ For a published build:
 
 Chrome must keep that folder in place while the unpacked extension is installed.
 
-For the unreleased v0.8.5 development candidate, use the reviewed development branch only after its tests pass and it is intentionally published.
+For the unreleased v0.9.1 development candidate, use the reviewed development branch only after both the 429 and stream-recovery regression suites pass and it is intentionally published.
 
 ## Using it
 
@@ -127,7 +127,7 @@ Maintainer regression tests use Playwright and a local synthetic server only. Ru
 
 No regression test should make a live request to ChatGPT/OpenAI or use a real account session.
 
-The current suite covers concurrency, non-target passthrough, POST passthrough, aborts, Request objects, Retry-After, stream-status recovery, the kill switch, two-tab coordination, passive POST diagnostics and diagnostic privacy.
+The current suites cover 429 concurrency/backoff, non-target and POST passthrough, aborts, Request objects, Retry-After, stream-status recovery, terminal 429 diagnostics, two-tab coordination, passive POST diagnostics, diagnostic privacy, and the bounded resume-404 recovery path inherited from the local v0.9.0 build.
 
 ## Reporting a problem
 

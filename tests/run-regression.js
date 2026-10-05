@@ -191,6 +191,38 @@ async function clearGuardCooldowns(page){
     networkCalls:st.counts['GET /backend-api/conversation/stream-status-test/stream_status']||0
   });
 
+  await clearGuardCooldowns(page);
+  await reset(context.request);
+  await page.evaluate(async base=>{
+    const response=await fetch(base+'/backend-api/conversation/recovery-test/stream_status');
+    await response.json();
+  },base);
+  await page.waitForFunction(
+    ()=>typeof __CGUARD_STREAM_STATUS__==='function' &&
+      (__CGUARD_STREAM_STATUS__().metrics?.streamingObserved||0)>=1,
+    {timeout:2000}
+  );
+  t0=Date.now();
+  const resumeRecovery=await page.evaluate(async base=>{
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({conversation_id:'recovery-test',offset:0})
+    });
+    return {status:response.status,body:await response.text()};
+  },base);
+  st=await state(context.request);
+  const recoveryObserverStatus=await page.evaluate(()=>__CGUARD_STREAM_STATUS__());
+  results.tests.push({
+    name:'resume_404_recovery',
+    status:resumeRecovery.status,
+    body:resumeRecovery.body,
+    elapsedMs:Date.now()-t0,
+    networkCalls:st.counts['POST /backend-api/f/conversation/resume']||0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/recovery-test/stream_status']||0,
+    recoverySuccess:recoveryObserverStatus.metrics?.recoverySuccess||0
+  });
+
   await reset(context.request);
   t0=Date.now();
   const retryAfter=await page.evaluate(async base=>(await fetch(
@@ -274,6 +306,9 @@ async function clearGuardCooldowns(page){
       ]))
     : null;
   results.guardStatus=await page.evaluate(()=>__CGUARD_STATUS__());
+  results.streamObserverStatus=await page.evaluate(()=>
+    typeof __CGUARD_STREAM_STATUS__==='function' ? __CGUARD_STREAM_STATUS__() : null
+  );
   const byName=Object.fromEntries(results.tests.map(t=>[t.name,t]));
   const checks={
     fiveConcurrent:byName.five_concurrent.networkCalls===2 && byName.five_concurrent.statuses.every(x=>x===200),
@@ -289,6 +324,11 @@ async function clearGuardCooldowns(page){
     streamStatus:byName.stream_status_transient_recovery.networkCalls===2 &&
       byName.stream_status_transient_recovery.status===200 &&
       byName.stream_status_transient_recovery.elapsedMs<9000,
+    resume404Recovery:byName.resume_404_recovery.networkCalls===2 &&
+      byName.resume_404_recovery.streamStatusCalls===1 &&
+      byName.resume_404_recovery.status===200 &&
+      byName.resume_404_recovery.body.includes('resume_conversation_token') &&
+      byName.resume_404_recovery.elapsedMs<8000,
     retryAfter:byName.retry_after_honored.networkCalls===2 && byName.retry_after_honored.status===200 && byName.retry_after_honored.elapsedMs>=14500,
     uiBudget:byName.ui_budget_transient_recovery.networkCalls===3 &&
       byName.ui_budget_transient_recovery.status===200 &&
@@ -310,6 +350,12 @@ async function clearGuardCooldowns(page){
       const events=results.storage?.cguard_events||[];
       return events.some(e=>e.type==='429-backoff'&&e.surface==='stream-status'&&e.protection==='active');
     })(),
+    resumeRecoveryMetric:(byName.resume_404_recovery.recoverySuccess||0)>=1,
+    resumeRecoveryTelemetry:(()=>{
+      const events=results.storage?.cguard_events||[];
+      return events.some(e=>e.type==='resume-recovery-success'&&
+        e.attempt===1&&e.offset===1&&e.status===200);
+    })(),
     passiveSurfaceTelemetry:(()=>{
       const events=results.storage?.cguard_events||[];
       return ['conversation-resume','conversation-batch','conversation-init'].every(surface=>
@@ -322,7 +368,8 @@ async function clearGuardCooldowns(page){
       return events.every(e=>
         forbiddenKeys.every(key=>!(key in e)) &&
         !JSON.stringify(e).includes('/backend-api/') &&
-        !JSON.stringify(e).includes('stream-status-test')
+        !JSON.stringify(e).includes('stream-status-test') &&
+        !JSON.stringify(e).includes('recovery-test')
       );
     })(),
     globalCooldownMetric:(results.guardStatus?.metrics?.globalCooldownHits||0)>=1,

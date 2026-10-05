@@ -6,7 +6,11 @@ byId("version").textContent = "v" + extensionVersion;
 const SAFE_EVENT_KEYS = new Set([
   "ts", "type", "surface", "method", "status", "protection", "source",
   "attempt", "waitMs", "retryAfterMs", "cooldownMs", "elapsedMs",
-  "scope", "capped", "rawWaitMs", "error"
+  "scope", "capped", "rawWaitMs", "error",
+  "reason", "outcome", "statusAgeMs", "offset", "attempts",
+  "messageStreamComplete", "done", "finalAssistant", "handoff",
+  "resumeTokenSeen", "streamingSeen", "completedSinceRequest",
+  "aborted", "afterResume404", "recoveryEnabled", "recoveryActive"
 ]);
 
 function sanitizeRecentEvent(event) {
