@@ -4,7 +4,8 @@
   "private": true,
   "description": "Regression tests for the ChatGPT Conversation Availability Guard browser extension",
   "scripts": {
-    "test": "node tests/run-regression.js"
+    "test": "node tests/run-regression.js",
+    "test:long": "node tests/run-long-recovery.js"
   },
   "devDependencies": {
     "playwright": "1.63.0"
