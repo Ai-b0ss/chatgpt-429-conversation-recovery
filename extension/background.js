@@ -63,6 +63,10 @@ function sanitizeEvent(event) {
   return safe;
 }
 
+function keepStoredEvent(event) {
+  return !(event?.type === "stream-status-parse-error" && !("status" in event));
+}
+
 function enqueueEvent(event) {
   const sanitized = sanitizeEvent(event);
   if (!sanitized) return;
@@ -73,7 +77,7 @@ function enqueueEvent(event) {
       "cguard_last_event"
     ]);
     const events = Array.isArray(current.cguard_events)
-      ? current.cguard_events.map(sanitizeEvent).filter(Boolean)
+      ? current.cguard_events.map(sanitizeEvent).filter(Boolean).filter(keepStoredEvent)
       : [];
     const counts = current.cguard_counts &&
       typeof current.cguard_counts === "object"
@@ -100,10 +104,12 @@ async function sanitizeStoredEvents() {
       "cguard_last_event"
     ]);
     const events = Array.isArray(current.cguard_events)
-      ? current.cguard_events.map(sanitizeEvent).filter(Boolean).slice(-200)
+      ? current.cguard_events.map(sanitizeEvent).filter(Boolean).filter(keepStoredEvent).slice(-200)
       : [];
-    const last = sanitizeEvent(current.cguard_last_event) ||
-      (events.length ? events[events.length - 1] : null);
+    const sanitizedLast = sanitizeEvent(current.cguard_last_event);
+    const last = sanitizedLast && keepStoredEvent(sanitizedLast)
+      ? sanitizedLast
+      : (events.length ? events[events.length - 1] : null);
     await chrome.storage.local.set({
       cguard_events: events,
       cguard_last_event: last

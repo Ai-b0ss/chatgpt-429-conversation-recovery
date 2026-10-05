@@ -337,6 +337,35 @@ async function clearGuardCooldowns(page){
         'cguard_counts','cguard_last_event','cguard_events'
       ]))
     : null;
+
+  if(worker){
+    const originalStorage=await worker.evaluate(async()=>await chrome.storage.local.get([
+      'cguard_counts','cguard_last_event','cguard_events'
+    ]));
+    await worker.evaluate(async()=>await chrome.storage.local.set({
+      cguard_events:[
+        {ts:'2026-01-01T00:00:00.000Z',type:'stream-status-parse-error'},
+        {ts:'2026-01-01T00:00:01.000Z',type:'429-final',status:429,surface:'conversation-detail'}
+      ],
+      cguard_last_event:{ts:'2026-01-01T00:00:00.000Z',type:'stream-status-parse-error'}
+    }));
+    await page.evaluate(()=>window.dispatchEvent(new CustomEvent('__cguard_event__',{
+      detail:JSON.stringify({type:'migration-probe'})
+    })));
+    await page.waitForTimeout(250);
+    const migrated=await worker.evaluate(async()=>await chrome.storage.local.get([
+      'cguard_last_event','cguard_events'
+    ]));
+    results.tests.push({
+      name:'legacy_noise_migration',
+      legacyPresent:(migrated.cguard_events||[]).some(e=>e.type==='stream-status-parse-error'&&!('status' in e)),
+      final429Present:(migrated.cguard_events||[]).some(e=>e.type==='429-final'&&e.status===429),
+      probePresent:(migrated.cguard_events||[]).some(e=>e.type==='migration-probe'),
+      lastType:migrated.cguard_last_event?.type||null
+    });
+    await worker.evaluate(async original=>await chrome.storage.local.set(original),originalStorage);
+  }
+
   results.guardStatus=await page.evaluate(()=>__CGUARD_STATUS__());
   results.streamObserverStatus=await page.evaluate(()=>
     typeof __CGUARD_STREAM_STATUS__==='function' ? __CGUARD_STREAM_STATUS__() : null
@@ -363,6 +392,10 @@ async function clearGuardCooldowns(page){
       byName.stream_status_noise_control.transitionDelta===1 &&
       byName.stream_status_noise_control.parseEvents===1 &&
       byName.stream_status_noise_control.observedEvents===1,
+    legacyNoiseMigration:byName.legacy_noise_migration?.legacyPresent===false &&
+      byName.legacy_noise_migration?.final429Present===true &&
+      byName.legacy_noise_migration?.probePresent===true &&
+      byName.legacy_noise_migration?.lastType==='migration-probe',
     resume404Recovery:byName.resume_404_recovery.networkCalls===2 &&
       byName.resume_404_recovery.streamStatusCalls===1 &&
       byName.resume_404_recovery.status===200 &&
