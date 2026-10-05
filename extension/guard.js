@@ -1,4 +1,4 @@
-// ChatGPT Conversation Availability Guard v0.9.2
+// ChatGPT Conversation Availability Guard v0.9.3
 // Mitigates transient conversation-read HTTP 429 failures; it does not bypass rate limits.
 (() => {
   if (window.__CGUARD_INSTALLED__) return;
@@ -23,13 +23,18 @@
   const detailMaxInternalRetries = 2;
   const listMaxInternalRetries = 1;
   const detailTerminalCooldownMs = 180000;
+  // A real ChatGPT conversation-detail 429 can outlive the short UI retry
+  // budget by minutes. Keep that safe GET pending instead of exposing 429
+  // to React, which otherwise latches the conversation into "unavailable".
+  const productionDetailRecoveryWindowMs = 5 * 60 * 1000;
+  const productionDetailRecoveryBackoffs = [2000, 4000, 8000, 15000, 30000, 45000, 60000];
   const listTerminalCooldownMs = 30000;
   const disableKey = "chatgpt-429-guard:disable";
   const cooldownStoragePrefix = "chatgpt-429-guard:cooldown:";
   const hardCooldownStoragePrefix = "chatgpt-429-guard:hard-cooldown:";
 
   const metrics = {
-    version: "0.9.2",
+    version: "0.9.3",
     installedAt: new Date().toISOString(),
     protectedCalls: 0,
     nativeCalls: 0,
@@ -451,6 +456,9 @@
       ? listTerminalCooldownMs
       : detailTerminalCooldownMs;
     const abortCooldownMs = isList ? 5000 : 12000;
+    const longRecovery = surface === "conversation-detail" &&
+      location.hostname === "chatgpt.com";
+    const recoveryStarted = now();
 
     await waitForPeer(key, signal);
     await waitForCooldown(key, signal);
@@ -459,7 +467,7 @@
     let saw429 = false;
 
     try {
-      for (let attempt = 0; attempt <= maxInternalRetries; attempt++) {
+      for (let attempt = 0; ; attempt++) {
         metrics.nativeCalls++;
         const started = now();
         const response = await nativeFetch(input, init);
@@ -487,20 +495,30 @@
         saw429 = true;
         let serverWait = retryAfterMs(response);
 
-        if (attempt >= maxInternalRetries) break;
+        const withinLongRecovery = longRecovery &&
+          now() - recoveryStarted < productionDetailRecoveryWindowMs;
+        if (attempt >= maxInternalRetries && !withinLongRecovery) break;
 
         metrics.retries429++;
         const level = failureLevel.get(key) || 0;
-        const localBase = backoffs[Math.min(
+        const selectedBackoffs = longRecovery
+          ? productionDetailRecoveryBackoffs
+          : backoffs;
+        const localBase = selectedBackoffs[Math.min(
           level,
-          backoffs.length - 1
+          selectedBackoffs.length - 1
         )];
-        const localWait = Math.min(
-          jitteredBackoffMs(localBase),
-          inlineBackoffCapMs
-        );
+        const localWait = longRecovery
+          ? jitteredBackoffMs(localBase)
+          : Math.min(jitteredBackoffMs(localBase), inlineBackoffCapMs);
         failureLevel.set(key, level + 1);
-        const wait = Math.max(localWait, serverWait);
+        const candidateWait = Math.max(localWait, serverWait);
+        const recoveryRemaining = longRecovery
+          ? Math.max(0, productionDetailRecoveryWindowMs - (now() - recoveryStarted))
+          : candidateWait;
+        const wait = longRecovery
+          ? Math.min(candidateWait, recoveryRemaining)
+          : candidateWait;
         const softUntil = now() + wait;
         const hardUntil = serverWait > 0 ? now() + serverWait : 0;
         applyRateCooldown(key, softUntil, hardUntil);
@@ -516,6 +534,10 @@
           retryAfterMs: serverWait
         });
         await sleep(wait, signal);
+        if (longRecovery &&
+            now() - recoveryStarted >= productionDetailRecoveryWindowMs) {
+          break;
+        }
       }
 
       metrics.final429++;
