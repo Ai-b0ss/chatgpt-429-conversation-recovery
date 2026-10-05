@@ -10,6 +10,7 @@ Production 429 recovery fix based on the 2026-10-05 live ChatGPT reproduction.
 - Uses sparse escalating backoff (2s → 4s → 8s → 15s → 30s → 45s → 60s), still honoring Retry-After, AbortSignal, deduplication, cross-tab coordination, and the kill switch.
 - Caps the long recovery by elapsed time; localhost regression behavior and unsafe/non-idempotent POST handling remain unchanged.
 - Removes the temporary production-canary load generator from the installed extension after the live reproduction.
+- Adds a permanent production-origin long-recovery regression: 45 seconds of intercepted 429s on `https://chatgpt.com`, no early `429-final`, then recovery of the original fetch to HTTP 200.
 
 ## 0.9.2 — Unreleased
 

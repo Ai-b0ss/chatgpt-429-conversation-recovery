@@ -1,5 +1,6 @@
 node_modules/
 tests/regression-result.json
+tests/long-recovery-result.json
 .DS_Store
 Thumbs.db
 *.log
