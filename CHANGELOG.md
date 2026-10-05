@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.5 — Unreleased
+
+Conversation-availability hardening after a confirmed real 429-backed recurrence that v0.8.4 did not prevent.
+
+- Renames the product-facing extension from ChatGPT 429 Guard to ChatGPT Conversation Availability Guard while keeping the remote repository name unchanged.
+- Adds active protection for GET /backend-api/conversation/{id}/stream_status, which v0.8.4 only observed passively.
+- Keeps resume, batch and init POST surfaces diagnostic-only; they are not automatically replayed because idempotence is not proven.
+- Stores a bounded, privacy-filtered event history with surface, method, status, protection mode and timing/backoff fields.
+- Removes tab IDs, correlation hashes, full URLs and conversation identifiers from stored/exported diagnostics.
+- Expands Copy safe diagnostics from one last event to the recent bounded event sequence needed to classify the next real recurrence.
+- Adds deterministic regression coverage for stream-status recovery, passive POST 429s and diagnostic privacy.
+- Documents that v0.8.5 is a development candidate, not a universal cure, until another real recurrence identifies the production failure surface.
+
 ## 0.8.4 — 2026-09-30
 
 Live 429/UI-timeout fix based on a real browser failure capture.

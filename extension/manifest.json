@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT 429 Guard",
-  "version": "0.8.4",
-  "description": "Reduces duplicate ChatGPT conversation retries after HTTP 429 and respects server backoff. Unofficial.",
+  "name": "ChatGPT Conversation Availability Guard",
+  "version": "0.8.5",
+  "description": "Mitigates transient HTTP 429 failures on ChatGPT conversation reads and captures safe diagnostics for chat-unavailable failures. Unofficial.",
   "permissions": ["storage", "webRequest"],
   "background": {
     "service_worker": "background.js"
@@ -22,7 +22,7 @@
   ],
   "host_permissions": ["https://chatgpt.com/*"],
   "action": {
-    "default_title": "ChatGPT 429 Guard",
+    "default_title": "ChatGPT Conversation Availability Guard",
     "default_popup": "popup.html"
   }
 }

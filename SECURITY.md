@@ -1,6 +1,6 @@
 # Security and privacy
 
-ChatGPT 429 Guard is a browser extension that changes a narrow part of ChatGPT conversation-read retry behavior. It does not bypass authentication, account limits, or OpenAI rate limits.
+ChatGPT Conversation Availability Guard is a browser extension that changes a narrow set of safe ChatGPT conversation-read GET retry paths. It does not bypass authentication, account limits, subscription limits, or OpenAI rate limits.
 
 ## Extension permissions
 
@@ -14,7 +14,7 @@ It does not request cookie, download, native-messaging, identity, browser-manage
 
 ## Data handling
 
-The extension does not store conversation text, response bodies, cookies, authorization headers, full request URLs, or conversation IDs. Diagnostics stay in the browser unless the user explicitly copies them.
+The extension does not store conversation text, request/response bodies, cookies, authorization headers, full request URLs, conversation IDs, tab IDs, or correlation hashes. Diagnostics stay in the browser unless the user explicitly copies them.
 
 ## Supply-chain controls
 
