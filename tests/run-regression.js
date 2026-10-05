@@ -117,6 +117,23 @@ async function clearGuardCooldowns(page){
     networkCalls:st.counts['POST /backend-api/conversations/post-id']||0
   });
 
+  for(const [name,path] of [
+    ['resume_passthrough','/backend-api/f/conversation/resume'],
+    ['batch_passthrough','/backend-api/conversations/batch'],
+    ['init_passthrough','/backend-api/conversation/init']
+  ]){
+    await reset(context.request);
+    t0=Date.now();
+    const status=await page.evaluate(async ({base,path})=>(await fetch(base+path,{
+      method:'POST',headers:{'content-type':'application/json'},body:'{}'
+    })).status,{base,path});
+    st=await state(context.request);
+    results.tests.push({
+      name,status,elapsedMs:Date.now()-t0,
+      networkCalls:st.counts['POST '+path]||0
+    });
+  }
+
   await reset(context.request);
   t0=Date.now();
   const abort=await page.evaluate(async base=>{
@@ -136,6 +153,20 @@ async function clearGuardCooldowns(page){
   await clearGuardCooldowns(page);
   await reset(context.request);
   t0=Date.now();
+  const terminal429=await page.evaluate(async base=>(await fetch(
+    base+'/backend-api/conversations/always-429'
+  )).status,base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'terminal_429_escape',
+    status:terminal429,
+    elapsedMs:Date.now()-t0,
+    networkCalls:st.counts['GET /backend-api/conversations/always-429']||0
+  });
+
+  await clearGuardCooldowns(page);
+  await reset(context.request);
+  t0=Date.now();
   const reqObj=await page.evaluate(async base=>{
     const req=new Request(base+'/backend-api/conversations/request-object?num_turns=10');
     return (await fetch(req)).status;
@@ -144,6 +175,84 @@ async function clearGuardCooldowns(page){
   results.tests.push({
     name:'request_object',status:reqObj,elapsedMs:Date.now()-t0,
     networkCalls:st.counts['GET /backend-api/conversations/request-object']||0
+  });
+
+  await clearGuardCooldowns(page);
+  await reset(context.request);
+  t0=Date.now();
+  const streamStatus=await page.evaluate(async base=>(await fetch(
+    base+'/backend-api/conversation/stream-status-test/stream_status'
+  )).status,base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'stream_status_transient_recovery',
+    status:streamStatus,
+    elapsedMs:Date.now()-t0,
+    networkCalls:st.counts['GET /backend-api/conversation/stream-status-test/stream_status']||0
+  });
+
+  const streamNoise=await page.evaluate(async base=>{
+    const before={...__CGUARD_STREAM_STATUS__().metrics};
+    const events=[];
+    const onEvent=e=>{ try{events.push(JSON.parse(e.detail));}catch{} };
+    window.addEventListener('__cguard_event__',onEvent);
+    const paths=[
+      '/backend-api/conversation/empty-204/stream_status',
+      '/backend-api/conversation/empty-200/stream_status',
+      '/backend-api/conversation/malformed-status/stream_status',
+      '/backend-api/conversation/malformed-status/stream_status',
+      '/backend-api/conversation/malformed-status/stream_status',
+      '/backend-api/conversation/repeat-status/stream_status',
+      '/backend-api/conversation/repeat-status/stream_status',
+      '/backend-api/conversation/repeat-status/stream_status'
+    ];
+    const statuses=[];
+    for(const path of paths) statuses.push((await fetch(base+path)).status);
+    await new Promise(r=>setTimeout(r,150));
+    window.removeEventListener('__cguard_event__',onEvent);
+    const after={...__CGUARD_STREAM_STATUS__().metrics};
+    return {
+      statuses,
+      emptyDelta:(after.streamStatusEmpty||0)-(before.streamStatusEmpty||0),
+      parseDelta:(after.parseErrors||0)-(before.parseErrors||0),
+      observedDelta:(after.streamStatusObserved||0)-(before.streamStatusObserved||0),
+      transitionDelta:(after.streamStatusTransitions||0)-(before.streamStatusTransitions||0),
+      parseEvents:events.filter(e=>e.type==='stream-status-parse-error').length,
+      observedEvents:events.filter(e=>e.type==='stream-status-observed').length
+    };
+  },base);
+  results.tests.push({name:'stream_status_noise_control',...streamNoise});
+
+  await clearGuardCooldowns(page);
+  await reset(context.request);
+  await page.evaluate(async base=>{
+    const response=await fetch(base+'/backend-api/conversation/recovery-test/stream_status');
+    await response.json();
+  },base);
+  await page.waitForFunction(
+    ()=>typeof __CGUARD_STREAM_STATUS__==='function' &&
+      (__CGUARD_STREAM_STATUS__().metrics?.streamingObserved||0)>=1,
+    {timeout:2000}
+  );
+  t0=Date.now();
+  const resumeRecovery=await page.evaluate(async base=>{
+    const response=await fetch(base+'/backend-api/f/conversation/resume',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({conversation_id:'recovery-test',offset:0})
+    });
+    return {status:response.status,body:await response.text()};
+  },base);
+  st=await state(context.request);
+  const recoveryObserverStatus=await page.evaluate(()=>__CGUARD_STREAM_STATUS__());
+  results.tests.push({
+    name:'resume_404_recovery',
+    status:resumeRecovery.status,
+    body:resumeRecovery.body,
+    elapsedMs:Date.now()-t0,
+    networkCalls:st.counts['POST /backend-api/f/conversation/resume']||0,
+    streamStatusCalls:st.counts['GET /backend-api/conversation/recovery-test/stream_status']||0,
+    recoverySuccess:recoveryObserverStatus.metrics?.recoverySuccess||0
   });
 
   await reset(context.request);
@@ -228,14 +337,70 @@ async function clearGuardCooldowns(page){
         'cguard_counts','cguard_last_event','cguard_events'
       ]))
     : null;
+
+  if(worker){
+    const originalStorage=await worker.evaluate(async()=>await chrome.storage.local.get([
+      'cguard_counts','cguard_last_event','cguard_events'
+    ]));
+    await worker.evaluate(async()=>await chrome.storage.local.set({
+      cguard_events:[
+        {ts:'2026-01-01T00:00:00.000Z',type:'stream-status-parse-error'},
+        {ts:'2026-01-01T00:00:01.000Z',type:'429-final',status:429,surface:'conversation-detail'}
+      ],
+      cguard_last_event:{ts:'2026-01-01T00:00:00.000Z',type:'stream-status-parse-error'}
+    }));
+    await page.evaluate(()=>window.dispatchEvent(new CustomEvent('__cguard_event__',{
+      detail:JSON.stringify({type:'migration-probe'})
+    })));
+    await page.waitForTimeout(250);
+    const migrated=await worker.evaluate(async()=>await chrome.storage.local.get([
+      'cguard_last_event','cguard_events'
+    ]));
+    results.tests.push({
+      name:'legacy_noise_migration',
+      legacyPresent:(migrated.cguard_events||[]).some(e=>e.type==='stream-status-parse-error'&&!('status' in e)),
+      final429Present:(migrated.cguard_events||[]).some(e=>e.type==='429-final'&&e.status===429),
+      probePresent:(migrated.cguard_events||[]).some(e=>e.type==='migration-probe'),
+      lastType:migrated.cguard_last_event?.type||null
+    });
+    await worker.evaluate(async original=>await chrome.storage.local.set(original),originalStorage);
+  }
+
   results.guardStatus=await page.evaluate(()=>__CGUARD_STATUS__());
+  results.streamObserverStatus=await page.evaluate(()=>
+    typeof __CGUARD_STREAM_STATUS__==='function' ? __CGUARD_STREAM_STATUS__() : null
+  );
   const byName=Object.fromEntries(results.tests.map(t=>[t.name,t]));
   const checks={
     fiveConcurrent:byName.five_concurrent.networkCalls===2 && byName.five_concurrent.statuses.every(x=>x===200),
     nonTarget:byName.non_target_passthrough.networkCalls===1 && byName.non_target_passthrough.status===429,
     post:byName.post_passthrough.networkCalls===1 && byName.post_passthrough.status===429,
+    resumePassive:byName.resume_passthrough.networkCalls===1 && byName.resume_passthrough.status===429,
+    batchPassive:byName.batch_passthrough.networkCalls===1 && byName.batch_passthrough.status===429,
+    initPassive:byName.init_passthrough.networkCalls===1 && byName.init_passthrough.status===429,
     abort:byName.abort_during_backoff.networkCalls===1 && byName.abort_during_backoff.outcome.resolved===false,
+    terminal429:byName.terminal_429_escape.networkCalls===3 &&
+      byName.terminal_429_escape.status===429,
     requestObject:byName.request_object.networkCalls===2 && byName.request_object.status===200,
+    streamStatus:byName.stream_status_transient_recovery.networkCalls===2 &&
+      byName.stream_status_transient_recovery.status===200 &&
+      byName.stream_status_transient_recovery.elapsedMs<9000,
+    streamStatusNoiseControl:byName.stream_status_noise_control.statuses.join(',')==='204,200,200,200,200,200,200,200' &&
+      byName.stream_status_noise_control.emptyDelta===2 &&
+      byName.stream_status_noise_control.parseDelta===3 &&
+      byName.stream_status_noise_control.observedDelta===3 &&
+      byName.stream_status_noise_control.transitionDelta===1 &&
+      byName.stream_status_noise_control.parseEvents===1 &&
+      byName.stream_status_noise_control.observedEvents===1,
+    legacyNoiseMigration:byName.legacy_noise_migration?.legacyPresent===false &&
+      byName.legacy_noise_migration?.final429Present===true &&
+      byName.legacy_noise_migration?.probePresent===true &&
+      byName.legacy_noise_migration?.lastType==='migration-probe',
+    resume404Recovery:byName.resume_404_recovery.networkCalls===2 &&
+      byName.resume_404_recovery.streamStatusCalls===1 &&
+      byName.resume_404_recovery.status===200 &&
+      byName.resume_404_recovery.body.includes('resume_conversation_token') &&
+      byName.resume_404_recovery.elapsedMs<8000,
     retryAfter:byName.retry_after_honored.networkCalls===2 && byName.retry_after_honored.status===200 && byName.retry_after_honored.elapsedMs>=14500,
     uiBudget:byName.ui_budget_transient_recovery.networkCalls===3 &&
       byName.ui_budget_transient_recovery.status===200 &&
@@ -248,11 +413,36 @@ async function clearGuardCooldowns(page){
     killSwitch:byName.kill_switch.networkCalls===1 && byName.kill_switch.status===429,
     twoTabs:byName.two_tabs_same_conversation.networkCalls<=3 && byName.two_tabs_same_conversation.statuses.every(x=>x===200),
     networkTelemetry:(results.storage?.cguard_counts?.['network-429']||0)>=6,
-    rateHashTelemetry:(()=>{
+    terminal429Telemetry:(()=>{
       const events=results.storage?.cguard_events||[];
-      const network=events.filter(e=>e.type==='network-429'&&e.rateHash);
-      const backoffs=events.filter(e=>e.type==='429-backoff'&&e.rateHash);
-      return network.some(n=>backoffs.some(b=>b.rateHash===n.rateHash));
+      return events.some(e=>e.type==='429-final'&&e.surface==='conversation-detail'&&
+        e.status===429&&e.protection==='active');
+    })(),
+    streamStatusTelemetry:(()=>{
+      const events=results.storage?.cguard_events||[];
+      return events.some(e=>e.type==='429-backoff'&&e.surface==='stream-status'&&e.protection==='active');
+    })(),
+    resumeRecoveryMetric:(byName.resume_404_recovery.recoverySuccess||0)>=1,
+    resumeRecoveryTelemetry:(()=>{
+      const events=results.storage?.cguard_events||[];
+      return events.some(e=>e.type==='resume-recovery-success'&&
+        e.attempt===1&&e.offset===1&&e.status===200);
+    })(),
+    passiveSurfaceTelemetry:(()=>{
+      const events=results.storage?.cguard_events||[];
+      return ['conversation-resume','conversation-batch','conversation-init'].every(surface=>
+        events.some(e=>e.type==='network-429'&&e.surface===surface&&e.protection==='passive-only')
+      );
+    })(),
+    diagnosticPrivacy:(()=>{
+      const events=results.storage?.cguard_events||[];
+      const forbiddenKeys=['rateHash','tabId','url','conversationId','requestBody','responseBody'];
+      return events.every(e=>
+        forbiddenKeys.every(key=>!(key in e)) &&
+        !JSON.stringify(e).includes('/backend-api/') &&
+        !JSON.stringify(e).includes('stream-status-test') &&
+        !JSON.stringify(e).includes('recovery-test')
+      );
     })(),
     globalCooldownMetric:(results.guardStatus?.metrics?.globalCooldownHits||0)>=1,
     softCooldownCapMetric:(results.guardStatus?.metrics?.softCooldownCaps||0)>=1

@@ -1,118 +1,158 @@
-# ChatGPT Stream Recovery
+# ChatGPT Conversation Availability Guard
 
-Unofficial browser-side recovery tools for ChatGPT conversation and streaming failures.
+Unofficial browser-side resilience and diagnostics for ChatGPT conversations that become unavailable after HTTP 429 / Too Many Requests.
 
-Common search/UI wording for the problem includes **“This chat is unavailable”**, **“Chat unavailable”**, **“stream interrupted”**, **HTTP 429 / Too Many Requests**, and the Russian ChatGPT message **«Этот чат недоступен»**.
+Common UI wording includes “This chat is unavailable”, “Chat unavailable”, and «Этот чат недоступен».
 
-**Current stable variant:** **ChatGPT 429 Guard v0.8.4** — targets the 429-backed form of the “This chat is unavailable” / «Этот чат недоступен» failure. It coalesces duplicate conversation reads, performs short UI-safe rescue retries after transient HTTP 429 / “Too Many Requests”, and keeps explicit server `Retry-After` delays authoritative without letting one chat impose a long local cooldown on unrelated chats.
+**Latest published release:** ChatGPT 429 Guard v0.8.4.
+**Current development candidate:** Conversation Availability Guard v0.9.3.
 
-The same visible “chat unavailable” message can have other causes. If no 429 is present, this specific variant may not help; other recovery paths should remain separate until verified.
+v0.8.4 reduced duplicate conversation reads and recovered several deterministic transient-429 scenarios, but it did **not** prevent a real confirmed 429-backed recurrence after prolonged ordinary ChatGPT use. A local v0.9.0 build later added bounded lost-stream resume recovery without changing the v0.8.4 429 Guard itself. A 2026-10-05 production reproduction then identified the critical surface directly: GET conversation-detail returned real HTTP 429 responses with no Retry-After, while the server remained rate-limited for roughly 2.5 minutes. v0.9.3 therefore keeps that safe production GET pending in a bounded five-minute sparse-retry window instead of exposing the early 429 to React.
 
-> This project does **not** bypass OpenAI rate limits. It only reduces unnecessary client-side retry traffic and respects server backoff.
+> This project does **not** bypass OpenAI rate limits or subscription limits. It only reduces unnecessary client-side retry pressure, respects server Retry-After, and tries to keep transient conversation-read failures from immediately degrading the UI.
 
 ## Why this exists
 
-We captured a real ChatGPT failure where one conversation was fetched 34 times: 4 successful reads followed by 30 HTTP 429 responses. The failed reads were spaced about 5.3 seconds apart, matching a client recovery loop.
+A captured failure showed one conversation being fetched 34 times: 4 successful reads followed by 30 HTTP 429 responses roughly 5.3 seconds apart. That looked like a client recovery loop adding pressure while the backend was already rate-limiting.
 
-The 429 Guard sits in front of a small set of conversation-read requests. When a 429 appears, it coalesces duplicate reads, shares a conversation-family cooldown across protected chats/tabs, honors `Retry-After` (including long server-directed waits), and lets ChatGPT retry later with much less request pressure.
+A later real-world recurrence showed that v0.8.4 was still incomplete: ChatGPT again reached “This chat is unavailable” after prolonged normal use with HTTP 429 involved. On 2026-10-05 the failure was reproduced against chatgpt.com: conversation-detail began returning 429, the old short budget emitted 429-final about six seconds later, and the backend did not recover until roughly 2.5 minutes after rate limiting began.
 
-## What it protects
+The current approach is conservative:
 
-Traffic-changing protection is intentionally narrow:
+- actively protect only safe/idempotent conversation GET reads;
+- deduplicate identical concurrent reads;
+- coordinate cooldowns across tabs;
+- honor Retry-After;
+- keep production conversation-detail recovery bounded by a five-minute elapsed-time window with sparse backoff;
+- observe related POST failures without replaying them;
+- keep a small local, privacy-filtered event history so the next real failure identifies the request surface.
 
-- `GET /backend-api/conversations/{id}`
-- `GET /backend-api/conversation/{id}`
-- `GET /backend-api/conversations` (conversation list)
+## What v0.9.3 actively protects
 
-It does **not** modify message sending, uploads, model requests, or conversation POST writes.
+Traffic-changing protection is limited to safe GET requests:
+
+- GET /backend-api/conversations/{id}
+- GET /backend-api/conversation/{id}
+- GET /backend-api/conversation/{id}/stream_status
+- GET /backend-api/conversations
+
+Active 429 protection for stream_status is new in v0.9.3. The local v0.9.0 stream-recovery layer could observe stream status for resume recovery, but the underlying 429 Guard still let a stream_status 429 pass through without retrying it.
+
+Related POST surfaces such as:
+
+- POST /backend-api/f/conversation/resume
+- POST /backend-api/conversations/batch
+- POST /backend-api/conversation/init
+
+are observed for diagnostics but are **not** automatically replayed. Their idempotence has not been proven, and blindly retrying them could duplicate an action.
+
+Message sending, uploads, model requests and unrelated ChatGPT traffic are not modified.
+
 ## Measured behavior
 
-| Scenario | Baseline client | 429 Guard |
-|---|---:|---:|
-| Server recovers after ~20 s | 5 network calls | 3 |
-| Server recovers after ~90 s | 19 network calls | 5 |
-| Persistent 429 storm | 30 calls before failure | 6 across the simulated window |
-| `Retry-After: 120` | 21 calls | 2 |
-| Five identical simultaneous reads | multiple callers | 2 network calls; all callers recover |
+The local rows are deterministic recovery simulations. The final row records the live 2026-10-05 production reproduction; it is evidence for this failure mode, not a promise about every possible ChatGPT outage.
 
-These are controlled recovery simulations, not a promise that every ChatGPT 429 has the same cause.
+| Scenario | Result |
+|---|---:|
+| Five identical simultaneous reads | 2 network calls; all callers recover |
+| stream_status: first response 429, second 200 | recovered with 2 network calls |
+| Transient two-429 conversation-detail case | recovered within the UI test budget |
+| Retry-After: 14 | second attempt waits for the server-directed delay |
+| resume / batch / init POST 429 | one call only; observed, not replayed |
+| Cross-tab same-conversation reads | serialized/deduplicated |
+| Copied/stored diagnostics | no full URLs, conversation IDs, tab IDs or correlation hashes |\n| Live chatgpt.com conversation-detail 429 | old budget failed in ~6s; server recovered after ~2.5 min; v0.9.3 window is 5 min |
 
 ## Install
 
-1. Download the latest ZIP from **Releases**.
+For a published build:
+
+1. Download the latest ZIP from Releases.
 2. Extract it somewhere permanent.
-3. Open `chrome://extensions`.
-4. Enable **Developer mode**.
-5. Click **Load unpacked**.
-6. Select the extracted `extension` folder.
+3. Open chrome://extensions.
+4. Enable Developer mode.
+5. Click Load unpacked.
+6. Select the extracted extension folder.
 7. Reload open ChatGPT tabs.
 
 Chrome must keep that folder in place while the unpacked extension is installed.
 
+For the unreleased v0.9.3 development candidate, use the reviewed development branch only after both the 429 and stream-recovery regression suites pass and it is intentionally published.
+
 ## Using it
 
-Open ChatGPT, then click the extension icon. The popup shows whether protection is active, how many retries were delayed, successful recoveries, final 429s, and local diagnostic counters.
+Open ChatGPT and click the extension icon.
 
-**Copy safe diagnostics** produces a small JSON report for bug reports. It excludes conversation text, cookies, response bodies, full request URLs and conversation IDs.
+The popup shows:
+
+- whether 429 protection is enabled;
+- retries and recoveries;
+- final 429 counts;
+- passive 429 observations;
+- recent 429 surfaces and whether they were actively protected or only observed.
+
+**Copy safe diagnostics** exports the latest bounded event history and counters. Stored/exported diagnostics exclude conversation text, cookies, authorization data, request/response bodies, full request URLs, conversation IDs, tab IDs and correlation hashes.
+
+If “This chat is unavailable” happens again, capture diagnostics as soon as possible. The most useful evidence is the sequence of surface + method + status + protection + timing, especially the last 429 before the UI failure.
+
 ## Safety model
 
 The extension is deliberately conservative:
 
-- exact-request deduplication prevents the wrong response from being reused;
-- the same conversation shares a rate-limit key across legacy/current read endpoints;
-- Chrome Web Locks serialize competing reads across tabs;
+- exact-request deduplication prevents reuse of a response for a different URL;
+- the same conversation shares a rate-limit key across current/legacy detail and stream-status reads;
+- Chrome Web Locks serialize competing reads across tabs when available;
 - cooldown survives a page reload;
-- a 429 on one protected conversation read slows other protected conversation reads during the same cooldown window;
-- positive `Retry-After` values are honored as seconds or HTTP dates, with a one-hour safety cap;
-- normal pre-response aborts do not create a false cooldown;
-- every deduplicated caller receives its own cloned `Response`;
-- a local kill switch can disable the guard immediately for future requests.
+- a 429 on one protected conversation read creates a short conversation-family anti-stampede cooldown;
+- positive Retry-After values are honored as seconds or HTTP dates, with a one-hour cap;
+- normal pre-response aborts do not create a false long cooldown;
+- every deduplicated caller receives its own cloned Response;
+- a local kill switch can disable future Guard intervention;
+- POST actions are never automatically replayed without evidence that doing so is safe.
 
-Passive telemetry can observe related ChatGPT network failures, but the 429 variant does not change those requests.
+A terminal 429 can still escape to ChatGPT after the bounded retry budget. That is intentional: the Guard must not hide or defeat a genuine server-side limit indefinitely.
 
 ## Project branches
 
-- `main` — project hub and current stable 429 release.
-- `429-only` — deliberately narrow branch for HTTP 429 conversation-read recovery.
-- Future recovery experiments can live in separate branches before anything is merged into the stable path.
+- main — project hub and latest published stable state.
+- 429-only — deliberately narrow HTTP 429 recovery branch.
+- maintenance/investigation branches — qualification before publication.
 
-This separation is intentional: a fix for one ChatGPT failure mode should not silently change unrelated traffic.
+The GitHub repository is still named chatgpt-stream-recovery; the product-facing extension name is changing because the actual project scope is conversation availability rather than generic stream recovery.
 
 ## Development
 
 The extension has no runtime dependencies.
 
-Maintainer regression tests use Playwright and a local synthetic server:
+Maintainer regression tests use Playwright and a local synthetic server only. Run npm install, install the Playwright Chromium browser, then run npm test.
 
-```bash
-npm install
-npx playwright install chromium
-npm test
-```
+No regression test should make a live request to ChatGPT/OpenAI or use a real account session.
 
-The suite covers concurrency, non-target passthrough, POST passthrough, aborts, `Request` objects, `Retry-After`, the kill switch, and two-tab coordination.
+The current suites cover 429 concurrency/backoff, non-target and POST passthrough, aborts, Request objects, Retry-After, stream-status recovery, terminal 429 diagnostics, two-tab coordination, passive POST diagnostics, diagnostic privacy, and the bounded resume-404 recovery path inherited from the local v0.9.0 build.
+
 ## Reporting a problem
 
-Use the GitHub 429 bug-report template and include:
+Issue #1 remains the collection point for the confirmed 429-backed “This chat is unavailable” problem.
+
+A useful report includes:
 
 1. the exact ChatGPT error shown in the UI;
-2. whether reloading the page changed anything;
-3. the copied safe diagnostics from the extension popup;
+2. whether the popup showed a final 429 or a passive 429 surface;
+3. Copy safe diagnostics captured immediately after the failure;
 4. Chrome/Edge version and OS;
-5. whether disabling the extension changes the behavior.
+5. whether reloading the chat recovered it.
 
-Please do **not** post cookies, authorization headers, conversation contents, private conversation URLs, or account tokens.
+Please do **not** post cookies, authorization headers, account tokens, private conversation URLs, conversation IDs, request/response bodies or conversation contents.
 
 ## Scope
 
-This is currently a Chromium Manifest V3 extension tested against `chatgpt.com`. ChatGPT is a moving target, so endpoint changes may require updates.
+This is currently a Chromium Manifest V3 extension tested against chatgpt.com. ChatGPT is a moving target, so endpoint changes may require updates.
 
 The project is unofficial and is not affiliated with or endorsed by OpenAI.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See LICENSE.
 
-Upstream engineering references and license decisions are recorded in [docs/upstream-tech-audit.md](docs/upstream-tech-audit.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Upstream engineering references and license decisions are recorded in docs/upstream-tech-audit.md and THIRD_PARTY_NOTICES.md.
 
-Russian quick start: [README.ru.md](README.ru.md).
+Russian quick start: README.ru.md.

@@ -1,5 +1,5 @@
-// ChatGPT 429 Guard v0.8.4
-// Reduces duplicate conversation reads after HTTP 429; it does not bypass rate limits.
+// ChatGPT Conversation Availability Guard v0.9.3
+// Mitigates transient conversation-read HTTP 429 failures; it does not bypass rate limits.
 (() => {
   if (window.__CGUARD_INSTALLED__) return;
   window.__CGUARD_INSTALLED__ = true;
@@ -23,13 +23,18 @@
   const detailMaxInternalRetries = 2;
   const listMaxInternalRetries = 1;
   const detailTerminalCooldownMs = 180000;
+  // A real ChatGPT conversation-detail 429 can outlive the short UI retry
+  // budget by minutes. Keep that safe GET pending instead of exposing 429
+  // to React, which otherwise latches the conversation into "unavailable".
+  const productionDetailRecoveryWindowMs = 5 * 60 * 1000;
+  const productionDetailRecoveryBackoffs = [2000, 4000, 8000, 15000, 30000, 45000, 60000];
   const listTerminalCooldownMs = 30000;
   const disableKey = "chatgpt-429-guard:disable";
   const cooldownStoragePrefix = "chatgpt-429-guard:cooldown:";
   const hardCooldownStoragePrefix = "chatgpt-429-guard:hard-cooldown:";
 
   const metrics = {
-    version: "0.8.4",
+    version: "0.9.3",
     installedAt: new Date().toISOString(),
     protectedCalls: 0,
     nativeCalls: 0,
@@ -294,6 +299,15 @@
       };
     }
 
+    match = path.match(/^\/backend-api\/conversation\/([^/?]+)\/stream_status$/);
+    if (match) {
+      return {
+        requestKey: info.url.href,
+        rateKey: "conversation:" + match[1],
+        surface: "stream-status",
+      };
+    }
+
     if (path === "/backend-api/conversations") {
       return {
         requestKey: info.url.href,
@@ -403,8 +417,7 @@
         waitMs: ms,
         scope: familyHardUntil > ownHardUntil
           ? "conversation-family-hard"
-          : "request-hard",
-        rateHash: hashKey(key)
+          : "request-hard"
       });
       await sleep(ms, signal);
       return;
@@ -423,8 +436,7 @@
       capped: ms < rawMs,
       scope: familyUntil > ownUntil
         ? "conversation-family-soft"
-        : "request-soft",
-      rateHash: hashKey(key)
+        : "request-soft"
     });
     await sleep(ms, signal);
   }
@@ -444,6 +456,9 @@
       ? listTerminalCooldownMs
       : detailTerminalCooldownMs;
     const abortCooldownMs = isList ? 5000 : 12000;
+    const longRecovery = surface === "conversation-detail" &&
+      location.hostname === "chatgpt.com";
+    const recoveryStarted = now();
 
     await waitForPeer(key, signal);
     await waitForCooldown(key, signal);
@@ -452,7 +467,7 @@
     let saw429 = false;
 
     try {
-      for (let attempt = 0; attempt <= maxInternalRetries; attempt++) {
+      for (let attempt = 0; ; attempt++) {
         metrics.nativeCalls++;
         const started = now();
         const response = await nativeFetch(input, init);
@@ -463,46 +478,66 @@
         if (response.status !== 429) {
           clearCooldown(key);
           failureLevel.delete(key);
-          if (saw429) metrics.successAfter429++;
-          log("response", {
-            surface,
-            status: response.status,
-            elapsedMs: elapsed,
-            attempt
-          });
+          if (saw429) {
+            metrics.successAfter429++;
+            log("429-recovered", {
+              surface,
+              method: "GET",
+              status: response.status,
+              protection: "active",
+              elapsedMs: elapsed,
+              attempt
+            });
+          }
           return response;
         }
 
         saw429 = true;
         let serverWait = retryAfterMs(response);
 
-        if (attempt >= maxInternalRetries) break;
+        const withinLongRecovery = longRecovery &&
+          now() - recoveryStarted < productionDetailRecoveryWindowMs;
+        if (attempt >= maxInternalRetries && !withinLongRecovery) break;
 
         metrics.retries429++;
         const level = failureLevel.get(key) || 0;
-        const localBase = backoffs[Math.min(
+        const selectedBackoffs = longRecovery
+          ? productionDetailRecoveryBackoffs
+          : backoffs;
+        const localBase = selectedBackoffs[Math.min(
           level,
-          backoffs.length - 1
+          selectedBackoffs.length - 1
         )];
-        const localWait = Math.min(
-          jitteredBackoffMs(localBase),
-          inlineBackoffCapMs
-        );
+        const localWait = longRecovery
+          ? jitteredBackoffMs(localBase)
+          : Math.min(jitteredBackoffMs(localBase), inlineBackoffCapMs);
         failureLevel.set(key, level + 1);
-        const wait = Math.max(localWait, serverWait);
+        const candidateWait = Math.max(localWait, serverWait);
+        const recoveryRemaining = longRecovery
+          ? Math.max(0, productionDetailRecoveryWindowMs - (now() - recoveryStarted))
+          : candidateWait;
+        const wait = longRecovery
+          ? Math.min(candidateWait, recoveryRemaining)
+          : candidateWait;
         const softUntil = now() + wait;
         const hardUntil = serverWait > 0 ? now() + serverWait : 0;
         applyRateCooldown(key, softUntil, hardUntil);
         metrics.totalWaitMs += wait;
         log("429-backoff", {
           surface,
+          method: "GET",
+          status: 429,
+          protection: "active",
           elapsedMs: elapsed,
           attempt,
           waitMs: wait,
-          retryAfterMs: serverWait,
-          rateHash: hashKey(key)
+          retryAfterMs: serverWait
         });
         await sleep(wait, signal);
+        if (longRecovery &&
+            now() - recoveryStarted >= productionDetailRecoveryWindowMs) {
+          break;
+        }
       }
 
       metrics.final429++;
@@ -515,8 +550,10 @@
       applyRateCooldown(key, terminalUntil);
       log("429-final", {
         surface,
-        cooldownMs: terminalCooldownMs,
-        rateHash: hashKey(key)
+        method: "GET",
+        status: 429,
+        protection: "active",
+        cooldownMs: terminalCooldownMs
       });
       return lastResponse;
     } catch (error) {
@@ -528,8 +565,7 @@
           applyRateCooldown(key, abortUntil);
           log("aborted-after-429", {
             surface,
-            cooldownMs: abortCooldownMs,
-            rateHash: hashKey(key)
+            cooldownMs: abortCooldownMs
           });
         } else {
           log("aborted-before-response", { surface });
@@ -585,6 +621,7 @@
 
     if (!protectedRequest) {
       const kind = passiveKind(input, init);
+      const info = requestInfo(input, init);
       const task = nativeFetch(input, init);
       if (!kind) return task;
       return task.then(response => {
@@ -592,7 +629,12 @@
           metrics.passive429++;
           metrics.passive429BySurface[kind] =
             (metrics.passive429BySurface[kind] || 0) + 1;
-          log("passive-429", { surface: kind });
+          log("passive-429", {
+            surface: kind,
+            method: info?.method || null,
+            status: 429,
+            protection: "passive"
+          });
         } else if (response.status >= 400) {
           metrics.passiveErrors++;
           const errorKey = kind + ":" + response.status;
@@ -600,7 +642,9 @@
             (metrics.passiveErrorsBySurface[errorKey] || 0) + 1;
           log("passive-error", {
             surface: kind,
-            status: response.status
+            method: info?.method || null,
+            status: response.status,
+            protection: "passive"
           });
         }
         return response;
