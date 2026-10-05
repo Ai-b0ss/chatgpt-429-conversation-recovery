@@ -1,11 +1,12 @@
-# ChatGPT Conversation Availability Guard
+# ChatGPT 429 / “This chat is unavailable” Conversation Recovery
 
-Unofficial browser-side resilience and diagnostics for ChatGPT conversations that become unavailable after HTTP 429 / Too Many Requests.
+**ChatGPT Conversation Availability Guard** is the browser extension behind this project.
 
-Common UI wording includes “This chat is unavailable”, “Chat unavailable”, and «Этот чат недоступен».
+Unofficial Chrome extension for recovering ChatGPT conversations that fail to load after HTTP 429 / Too Many Requests.
 
-**Latest published release:** ChatGPT 429 Guard v0.8.4.
-**Current development candidate:** Conversation Availability Guard v0.9.3.
+Search/error wording: **“This chat is unavailable”**, **“Unable to load this conversation”**, **“Failed to load conversation”**, **“Chat unavailable”**, **HTTP 429 / Too Many Requests**, **«Этот чат недоступен»**, and **«Не удалось загрузить этот разговор ChatGPT»**.
+
+**Latest stable release:** ChatGPT Conversation Availability Guard v0.9.3.
 
 v0.8.4 reduced duplicate conversation reads and recovered several deterministic transient-429 scenarios, but it did **not** prevent a real confirmed 429-backed recurrence after prolonged ordinary ChatGPT use. A local v0.9.0 build later added bounded lost-stream resume recovery without changing the v0.8.4 429 Guard itself. A 2026-10-05 production reproduction then identified the critical surface directly: GET conversation-detail returned real HTTP 429 responses with no Retry-After, while the server remained rate-limited for roughly 2.5 minutes. v0.9.3 therefore keeps that safe production GET pending in a bounded five-minute sparse-retry window instead of exposing the early 429 to React.
 
@@ -60,7 +61,8 @@ The local rows are deterministic recovery simulations. The final row records the
 | Retry-After: 14 | second attempt waits for the server-directed delay |
 | resume / batch / init POST 429 | one call only; observed, not replayed |
 | Cross-tab same-conversation reads | serialized/deduplicated |
-| Copied/stored diagnostics | no full URLs, conversation IDs, tab IDs or correlation hashes |\n| Live chatgpt.com conversation-detail 429 | old budget failed in ~6s; server recovered after ~2.5 min; v0.9.3 window is 5 min |
+| Copied/stored diagnostics | no full URLs, conversation IDs, tab IDs or correlation hashes |
+| Live chatgpt.com conversation-detail 429 | old budget failed in ~6s; server recovered after ~2.5 min; v0.9.3 window is 5 min |
 
 ## Install
 
@@ -76,7 +78,7 @@ For a published build:
 
 Chrome must keep that folder in place while the unpacked extension is installed.
 
-For the unreleased v0.9.3 development candidate, use the reviewed development branch only after both the 429 and stream-recovery regression suites pass and it is intentionally published.
+v0.9.3 is published and is the current stable build. The release passed both the standard regression suite and the production-origin long-429 recovery gate.
 
 ## Using it
 
@@ -117,7 +119,7 @@ A terminal 429 can still escape to ChatGPT after the bounded retry budget. That 
 - 429-only — deliberately narrow HTTP 429 recovery branch.
 - maintenance/investigation branches — qualification before publication.
 
-The GitHub repository is still named chatgpt-stream-recovery; the product-facing extension name is changing because the actual project scope is conversation availability rather than generic stream recovery.
+The repository is named **chatgpt-429-conversation-recovery** so people searching for the actual failure — ChatGPT 429, “This chat is unavailable”, or conversation recovery — can find it. The installed extension keeps the product name **ChatGPT Conversation Availability Guard**.
 
 ## Development
 
@@ -131,7 +133,7 @@ The current suites cover 429 concurrency/backoff, non-target and POST passthroug
 
 ## Reporting a problem
 
-Issue #1 remains the collection point for the confirmed 429-backed “This chat is unavailable” problem.
+Issue #1 documents the confirmed 429-backed “This chat is unavailable” failure and the v0.9.3 fix.
 
 A useful report includes:
 
