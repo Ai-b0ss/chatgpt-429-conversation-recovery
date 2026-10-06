@@ -1,0 +1,40 @@
+{
+  "schema": "github-objects-index-v1",
+  "snapshot_date": "2026-10-06",
+  "repository": "Ai-b0ss/chatgpt-429-conversation-recovery",
+  "pr_summary": {
+    "total": 1,
+    "open": 0,
+    "merged": 1,
+    "closed_unmerged": 0
+  },
+  "issue_summary": {
+    "total": 1,
+    "open": 0,
+    "closed": 1
+  },
+  "open_prs": [],
+  "workflow_sources": [
+    {
+      "path": ".github/workflows/regression.yml",
+      "blob": "42a83043f4d15636c1ab1ed80a4e959232d694bf",
+      "bytes": 735
+    }
+  ],
+  "tags": [
+    "v0.8.0",
+    "v0.8.1",
+    "v0.8.2",
+    "v0.8.3",
+    "v0.8.4",
+    "v0.9.3"
+  ],
+  "notable": [
+    {
+      "pr": 2,
+      "status": "MERGED/RELEASE",
+      "note": "v0.9.3 long production conversation-detail 429 recovery; use tags to compare behavior across release milestones."
+    }
+  ],
+  "public_boundary": "Keep archaeology limited to this public repository unless an authenticated agent has separate authorization to inspect private account context."
+}
