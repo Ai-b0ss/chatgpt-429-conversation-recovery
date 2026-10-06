@@ -11,6 +11,12 @@
       "role": "agent_tooling"
     },
     {
+      "path": ".cursor/rules/repository-navigation.mdc",
+      "blob": "0794e048f55abf3590390c38b5c75db9f5efc54b",
+      "bytes": 658,
+      "role": "agent_tooling"
+    },
+    {
       "path": ".github/CODEOWNERS",
       "blob": "7a7e75ffa863f70ef65dc9c417dab71894d4789a",
       "bytes": 11,
@@ -21,6 +27,12 @@
       "blob": "5824c83a2c8279f6af7cbd77c5799b06ee328044",
       "bytes": 1347,
       "role": "project_automation"
+    },
+    {
+      "path": ".github/copilot-instructions.md",
+      "blob": "1efac671cf6ddc5cdfdeb279bcd19e2bebc30014",
+      "bytes": 574,
+      "role": "agent_tooling"
     },
     {
       "path": ".github/dependabot.yml",
@@ -42,9 +54,9 @@
     },
     {
       "path": "AGENTS.md",
-      "blob": "ec7ad6a4a3263971bbb2251f3860d752843fc6d8",
-      "bytes": 1009,
-      "role": "documentation"
+      "blob": "0111a0b12cdee287fd5358119b2bae407285e3bf",
+      "bytes": 1960,
+      "role": "agent_tooling"
     },
     {
       "path": "CHANGELOG.md",
@@ -53,10 +65,22 @@
       "role": "documentation"
     },
     {
+      "path": "CLAUDE.md",
+      "blob": "c92840b89e49539ec1da2f95060d962a0687fd17",
+      "bytes": 703,
+      "role": "agent_tooling"
+    },
+    {
       "path": "CONTRIBUTING.md",
       "blob": "b36efea4cef3089e9334d9cc7dffac00f16779bc",
       "bytes": 767,
       "role": "documentation"
+    },
+    {
+      "path": "GEMINI.md",
+      "blob": "9a0eeffd26f59d4b73fba0d17bcd5d128677b043",
+      "bytes": 588,
+      "role": "agent_tooling"
     },
     {
       "path": "LICENSE",
@@ -66,8 +90,8 @@
     },
     {
       "path": "README.md",
-      "blob": "67708f59f3e76ec6bbcd533723be5165b6e07ecc",
-      "bytes": 9499,
+      "blob": "b419839cd0150b731b14a382a4499790b3b2fc28",
+      "bytes": 9572,
       "role": "documentation"
     },
     {
@@ -98,7 +122,13 @@
       "path": "docs/AGENT_NAVIGATION.md",
       "blob": "24dd4389df757b101ecd3b24d8721f028d98ad72",
       "bytes": 1816,
-      "role": "design_or_audit"
+      "role": "agent_tooling"
+    },
+    {
+      "path": "docs/AGENT_OPERATING_SYSTEM.md",
+      "blob": "af38acde0af01b974d90d1c7b7ef9a7a63a6a72b",
+      "bytes": 10450,
+      "role": "agent_tooling"
     },
     {
       "path": "docs/upstream-tech-audit.md",
@@ -183,6 +213,12 @@
       "blob": "e34589949a435c084f588dd3f8db870738c43fee",
       "bytes": 5225,
       "role": "regression_test"
+    },
+    {
+      "path": "tools/agent_history.py",
+      "blob": "e5bafa35894387de114935bbcd88607b7074851e",
+      "bytes": 14293,
+      "role": "agent_tooling"
     },
     {
       "path": "tools/build_agent_index.py",
