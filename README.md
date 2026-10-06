@@ -1,5 +1,7 @@
 # ChatGPT 429 / “This chat is unavailable” Conversation Recovery
 
+> **Agent navigation:** start with [`AGENTS.md`](AGENTS.md), then [`docs/AGENT_NAVIGATION.md`](docs/AGENT_NAVIGATION.md). Exact branch heads are indexed in [`.agent/branch-index.json`](.agent/branch-index.json); main-branch files/blobs are in [`.agent/file-index.json`](.agent/file-index.json). For any branch/SHA, run `python tools/build_agent_index.py --ref "<branch-or-SHA>"` to generate exact line counts and symbol locations.
+
 **ChatGPT Conversation Availability Guard** is the browser extension behind this project.
 
 Unofficial Chrome extension for recovering ChatGPT conversations that fail to load after HTTP 429 / Too Many Requests.
