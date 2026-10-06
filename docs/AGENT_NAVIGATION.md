@@ -21,4 +21,4 @@ Identify the request surface and method first. Then trace interception → dedup
 `.agent/branch-index.json` records all 8 heads. `429-only` is intentionally narrow; resume/stream branches add different recovery layers. Compare exact files instead of assuming one branch subsumes another.
 
 ## Line-level navigation
-Run `python tools/build_agent_index.py` after checkout. Use generated symbol lines to inspect bounded windows plus callers/tests. Regenerate after switching branches because line numbers differ.
+Run `python tools/build_agent_index.py --ref "<branch-or-SHA>"` for the target ref from any repository checkout. Use generated symbol lines to inspect bounded windows plus callers/tests. Regenerate after switching branches because line numbers differ.
