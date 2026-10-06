@@ -1,0 +1,32 @@
+{
+  "schema": "public-lineage-context-v1",
+  "snapshot_date": "2026-10-06",
+  "publication_boundary": "Never serialize private repository names, object ids, branches, code, runtime state or private evidence into this public repository without explicit publication authorization.",
+  "lineages": [
+    {
+      "id": "chatgpt-conversation-recovery",
+      "aliases": [
+        "429 recovery",
+        "conversation availability guard",
+        "stream recovery"
+      ],
+      "milestones": [
+        "v0.8.0",
+        "v0.8.1",
+        "v0.8.2",
+        "v0.8.3",
+        "v0.8.4",
+        "v0.9.3"
+      ],
+      "guards": [
+        "Not a generic rate-limit bypass.",
+        "Similar subject matter elsewhere is not code-lineage proof without direct provenance."
+      ]
+    }
+  ],
+  "rules": [
+    "Pin exact release/tag/branch before historical claims.",
+    "Separate implementation, proof and deployment state.",
+    "Preserve safe-replay/idempotency/privacy boundaries."
+  ]
+}
