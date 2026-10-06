@@ -1,0 +1,41 @@
+{
+  "schema": "github-pr-ledger-v1",
+  "snapshot_date": "2026-10-06",
+  "repository": "Ai-b0ss/chatgpt-429-conversation-recovery",
+  "visibility_context": "public-repository-self-history-only",
+  "privacy_note": "Contains only PR metadata/body hints already public in this repository. It intentionally does not name or map private account repositories.",
+  "completeness": {
+    "method": "GitHub PR search split by current open/closed state; each partition below 100-result cap",
+    "open_returned": 0,
+    "closed_returned": 1,
+    "total": 1,
+    "expected_from_account_index": 1,
+    "complete": true
+  },
+  "interpretation_rules": [
+    "Use real base/base_sha before scope comparisons.",
+    "Do not infer private account topology from this public ledger.",
+    "Exact head_sha binds historical evidence."
+  ],
+  "prs": [
+    {
+      "number": 2,
+      "title": "v0.9.3: recover long production conversation-detail 429s",
+      "state": "closed",
+      "merged": true,
+      "draft": false,
+      "base": "main",
+      "base_sha": "a836f366a2971f4d302d91b554afeec0f980c965",
+      "head": "hermes/maintenance-triage-20261005",
+      "head_sha": "e9540b56785e98a9419e5c49325cf44036941f73",
+      "merge_commit_sha": null,
+      "created_at": "2026-10-05T13:27:44Z",
+      "updated_at": "2026-10-05T15:42:09Z",
+      "closed_at": "2026-10-05T15:42:09Z",
+      "merged_at": "2026-10-05T15:42:09Z",
+      "commits": 6,
+      "purpose_hint": "## Summary",
+      "url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/pull/2"
+    }
+  ]
+}
