@@ -41,8 +41,9 @@
     },
     {
       "name": "main",
-      "head": "2b1c08cd0f13e407828b33f407aef593c8ca11a4",
-      "family": "main"
+      "head": null,
+      "family": "main",
+      "resolve_at_read_time": true
     },
     {
       "name": "resume-404-recovery-v084",
@@ -54,5 +55,6 @@
       "head": "314e72c53dadaa24aadc5da7edc52e9ded1b4a5d",
       "family": "stream-resume-lab"
     }
-  ]
+  ],
+  "main_resolution": "The main branch is dynamic. Resolve its current commit at read time with `git rev-parse main` or the GitHub branch ref. Non-main SHAs are navigation snapshots; re-resolve any branch that may have moved."
 }
