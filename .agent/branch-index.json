@@ -1,0 +1,58 @@
+{
+  "schema": "agent-branch-index-v1",
+  "repository": "Ai-b0ss/chatgpt-429-conversation-recovery",
+  "canonical_branch": "main",
+  "branch_count": 8,
+  "family_rules": {
+    "main": "published stable/integration state",
+    "429-hardening-upstream": "historical hardening line",
+    "429-jitter-hardening": "historical jitter hardening",
+    "429-only": "narrow 429-only line",
+    "429-ui-timeout-fix": "UI timeout work",
+    "hermes": "maintenance/triage",
+    "resume-404-recovery-v084": "resume recovery development",
+    "stream-resume-lab": "stream-resume experiments"
+  },
+  "branches": [
+    {
+      "name": "429-hardening-upstream",
+      "head": "c65c3ee658f017aa25a848679ddfb5576889c95c",
+      "family": "429-hardening-upstream"
+    },
+    {
+      "name": "429-jitter-hardening",
+      "head": "b033c0dbbc8ef8c0bb3bde24e0c955eac04135ff",
+      "family": "429-jitter-hardening"
+    },
+    {
+      "name": "429-only",
+      "head": "a836f366a2971f4d302d91b554afeec0f980c965",
+      "family": "429-only"
+    },
+    {
+      "name": "429-ui-timeout-fix",
+      "head": "a836f366a2971f4d302d91b554afeec0f980c965",
+      "family": "429-ui-timeout-fix"
+    },
+    {
+      "name": "hermes/maintenance-triage-20261005",
+      "head": "e9540b56785e98a9419e5c49325cf44036941f73",
+      "family": "hermes"
+    },
+    {
+      "name": "main",
+      "head": "2b1c08cd0f13e407828b33f407aef593c8ca11a4",
+      "family": "main"
+    },
+    {
+      "name": "resume-404-recovery-v084",
+      "head": "618982ffb5c72435fde92fb9e528dee9dcaaf26e",
+      "family": "resume-404-recovery-v084"
+    },
+    {
+      "name": "stream-resume-lab",
+      "head": "314e72c53dadaa24aadc5da7edc52e9ded1b4a5d",
+      "family": "stream-resume-lab"
+    }
+  ]
+}
