@@ -1,0 +1,176 @@
+{
+  "schema": "agent-file-index-v1",
+  "repository": "Ai-b0ss/chatgpt-429-conversation-recovery",
+  "branch": "main",
+  "note": "The extension deliberately separates safe GET 429 recovery from observed/non-replayed POST surfaces. Run tools/build_agent_index.py for exact branch-local lines.",
+  "files": [
+    {
+      "path": ".github/CODEOWNERS",
+      "blob": "7a7e75ffa863f70ef65dc9c417dab71894d4789a",
+      "bytes": 11,
+      "role": "project_automation"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/429.yml",
+      "blob": "5824c83a2c8279f6af7cbd77c5799b06ee328044",
+      "bytes": 1347,
+      "role": "project_automation"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "blob": "dd530947831021bf02b472f6e0378cad3c97905a",
+      "bytes": 133,
+      "role": "project_automation"
+    },
+    {
+      "path": ".github/workflows/regression.yml",
+      "blob": "42a83043f4d15636c1ab1ed80a4e959232d694bf",
+      "bytes": 735,
+      "role": "project_automation"
+    },
+    {
+      "path": ".gitignore",
+      "blob": "609d76035d218310823767f161751a79c4696a39",
+      "bytes": 114,
+      "role": "project_file"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "blob": "c5f05094927a7517e5ffd9e96f86895f4debf8b0",
+      "bytes": 7068,
+      "role": "documentation"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "blob": "b36efea4cef3089e9334d9cc7dffac00f16779bc",
+      "bytes": 767,
+      "role": "documentation"
+    },
+    {
+      "path": "LICENSE",
+      "blob": "26e4326e15edc39253f6a276f2e3c063971435a1",
+      "bytes": 1076,
+      "role": "documentation"
+    },
+    {
+      "path": "README.md",
+      "blob": "d9c78612c495c5baa332df33b9dece1d4372f874",
+      "bytes": 9068,
+      "role": "documentation"
+    },
+    {
+      "path": "README.ru.md",
+      "blob": "39d367ca1aa5f53ff96daa536d263ef67e0c8df5",
+      "bytes": 6858,
+      "role": "documentation"
+    },
+    {
+      "path": "SECURITY.md",
+      "blob": "19bd786f78b645ab7dbaf67a44bdc4121ade362b",
+      "bytes": 2054,
+      "role": "documentation"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "blob": "d32fd35a396e7eaa51d0848f95b0e0ad5fa5e5be",
+      "bytes": 1166,
+      "role": "documentation"
+    },
+    {
+      "path": "docs/429-recovery-design.md",
+      "blob": "b42cf200e8163456233acf681b65a83f1df9e63d",
+      "bytes": 2080,
+      "role": "design_or_audit"
+    },
+    {
+      "path": "docs/upstream-tech-audit.md",
+      "blob": "94403db97529f9f5f4c99b094b6625be134c8ced",
+      "bytes": 4001,
+      "role": "design_or_audit"
+    },
+    {
+      "path": "extension/background.js",
+      "blob": "0e20e55743b49aeb9d62896dfa86a2680f770880",
+      "bytes": 6477,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/bridge.js",
+      "blob": "0c3c3a9b802e00c7c64c46ce0dae5cf62be3578e",
+      "bytes": 1483,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/control.js",
+      "blob": "cc664918bf5214d2315101d0fdda121dc00c238e",
+      "bytes": 633,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/guard.js",
+      "blob": "b2fb4c2d73d4b1c5fa2ac04363a2b4f7bb37b121",
+      "bytes": 21976,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/manifest.json",
+      "blob": "e0dda452c92669f02745445f6cd4d161f6bbcc1c",
+      "bytes": 854,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/popup.html",
+      "blob": "6f23449205140e7d10a393cd98068bc6fb27d1b2",
+      "bytes": 1114,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/popup.js",
+      "blob": "f11deb761604581392fdf3540a0d2ba6f5757356",
+      "bytes": 5174,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/stream-observer.js",
+      "blob": "bdb8f8f42efe3b4f55f371fae6bec4108ed28d50",
+      "bytes": 35862,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "package-lock.json",
+      "blob": "d1a7e32241fcb60d5807dbcbf559a8c73a0f1b45",
+      "bytes": 1243,
+      "role": "project_file"
+    },
+    {
+      "path": "package.json",
+      "blob": "1a44efaca147f3e5888f6d84f8086a6e7992cd83",
+      "bytes": 370,
+      "role": "project_file"
+    },
+    {
+      "path": "tests/run-long-recovery.js",
+      "blob": "7f833afd948456df57dcae67ec3e4e7df88e1be1",
+      "bytes": 4725,
+      "role": "regression_test"
+    },
+    {
+      "path": "tests/run-regression.js",
+      "blob": "cb5344c2d6a67b49ef66c61148053d5305eb5278",
+      "bytes": 20153,
+      "role": "regression_test"
+    },
+    {
+      "path": "tests/server.py",
+      "blob": "e34589949a435c084f588dd3f8db870738c43fee",
+      "bytes": 5225,
+      "role": "regression_test"
+    },
+    {
+      "path": "tools/build_agent_index.py",
+      "blob": "6e97262afe88d48dd498ec6be3cdaf8d748259ff",
+      "bytes": 3455,
+      "role": "agent_tooling"
+    }
+  ]
+}
