@@ -5,15 +5,39 @@
   "self_indexing": "`.agent/file-index.json` is intentionally omitted to avoid recursive self-staleness.",
   "files": [
     {
+      "path": ".agent/branch-index.json",
+      "blob": "c16bf1932fac29e26761a7f648a948a481829974",
+      "bytes": 1957,
+      "role": "agent_tooling"
+    },
+    {
+      "path": ".agent/github-objects-index.json",
+      "blob": "1920d467f0f4377165eb192064daabc999f3b446",
+      "bytes": 1809,
+      "role": "agent_tooling"
+    },
+    {
+      "path": ".agent/lineage-index.json",
+      "blob": "fa58bfec33704256ef3b80631242f30da3361bc9",
+      "bytes": 984,
+      "role": "agent_tooling"
+    },
+    {
+      "path": ".agent/pr-ledger.json",
+      "blob": "a190b2ad91ba3fac67a940ded8030f41ac8fcb61",
+      "bytes": 1553,
+      "role": "agent_tooling"
+    },
+    {
       "path": ".agent/README.md",
       "blob": "c57c6a47ad5a0badf634cfc8e2a006a1ef30e344",
       "bytes": 1549,
       "role": "agent_tooling"
     },
     {
-      "path": ".agent/branch-index.json",
-      "blob": "c16bf1932fac29e26761a7f648a948a481829974",
-      "bytes": 1957,
+      "path": ".agent/tag-release-index.json",
+      "blob": "46b30c948b47351073ac1f577020331e744f91db",
+      "bytes": 11528,
       "role": "agent_tooling"
     },
     {
@@ -29,12 +53,6 @@
       "role": "project_automation"
     },
     {
-      "path": ".github/ISSUE_TEMPLATE/429.yml",
-      "blob": "5824c83a2c8279f6af7cbd77c5799b06ee328044",
-      "bytes": 1347,
-      "role": "project_automation"
-    },
-    {
       "path": ".github/copilot-instructions.md",
       "blob": "1efac671cf6ddc5cdfdeb279bcd19e2bebc30014",
       "bytes": 574,
@@ -44,6 +62,12 @@
       "path": ".github/dependabot.yml",
       "blob": "dd530947831021bf02b472f6e0378cad3c97905a",
       "bytes": 133,
+      "role": "project_automation"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/429.yml",
+      "blob": "5824c83a2c8279f6af7cbd77c5799b06ee328044",
+      "bytes": 1347,
       "role": "project_automation"
     },
     {
@@ -60,8 +84,8 @@
     },
     {
       "path": "AGENTS.md",
-      "blob": "0111a0b12cdee287fd5358119b2bae407285e3bf",
-      "bytes": 1960,
+      "blob": "8fcf504d0b722320711e99735e143f7725a3a4aa",
+      "bytes": 3310,
       "role": "agent_tooling"
     },
     {
@@ -83,46 +107,16 @@
       "role": "documentation"
     },
     {
-      "path": "GEMINI.md",
-      "blob": "9a0eeffd26f59d4b73fba0d17bcd5d128677b043",
-      "bytes": 588,
-      "role": "agent_tooling"
-    },
-    {
-      "path": "LICENSE",
-      "blob": "26e4326e15edc39253f6a276f2e3c063971435a1",
-      "bytes": 1076,
-      "role": "documentation"
-    },
-    {
-      "path": "README.md",
-      "blob": "1a734e3fbdb7f83415d99809766d253dfe723d22",
-      "bytes": 9691,
-      "role": "documentation"
-    },
-    {
-      "path": "README.ru.md",
-      "blob": "39d367ca1aa5f53ff96daa536d263ef67e0c8df5",
-      "bytes": 6858,
-      "role": "documentation"
-    },
-    {
-      "path": "SECURITY.md",
-      "blob": "19bd786f78b645ab7dbaf67a44bdc4121ade362b",
-      "bytes": 2054,
-      "role": "documentation"
-    },
-    {
-      "path": "THIRD_PARTY_NOTICES.md",
-      "blob": "d32fd35a396e7eaa51d0848f95b0e0ad5fa5e5be",
-      "bytes": 1166,
-      "role": "documentation"
-    },
-    {
       "path": "docs/429-recovery-design.md",
       "blob": "b42cf200e8163456233acf681b65a83f1df9e63d",
       "bytes": 2080,
       "role": "design_or_audit"
+    },
+    {
+      "path": "docs/ACCOUNT_CONTEXT.md",
+      "blob": "e230771f9481ff257e936499d4499ca12be17687",
+      "bytes": 1079,
+      "role": "documentation"
     },
     {
       "path": "docs/AGENT_NAVIGATION.md",
@@ -135,6 +129,12 @@
       "blob": "af38acde0af01b974d90d1c7b7ef9a7a63a6a72b",
       "bytes": 10450,
       "role": "agent_tooling"
+    },
+    {
+      "path": "docs/LINEAGE_CONTEXT.md",
+      "blob": "2ff98a09679e17e362735e65440700d27d544e42",
+      "bytes": 1624,
+      "role": "documentation"
     },
     {
       "path": "docs/REPOSITORY_INVENTORY.md",
@@ -197,6 +197,18 @@
       "role": "extension_runtime"
     },
     {
+      "path": "GEMINI.md",
+      "blob": "9a0eeffd26f59d4b73fba0d17bcd5d128677b043",
+      "bytes": 588,
+      "role": "agent_tooling"
+    },
+    {
+      "path": "LICENSE",
+      "blob": "26e4326e15edc39253f6a276f2e3c063971435a1",
+      "bytes": 1076,
+      "role": "documentation"
+    },
+    {
       "path": "package-lock.json",
       "blob": "d1a7e32241fcb60d5807dbcbf559a8c73a0f1b45",
       "bytes": 1243,
@@ -207,6 +219,24 @@
       "blob": "1a44efaca147f3e5888f6d84f8086a6e7992cd83",
       "bytes": 370,
       "role": "project_file"
+    },
+    {
+      "path": "README.md",
+      "blob": "1a734e3fbdb7f83415d99809766d253dfe723d22",
+      "bytes": 9691,
+      "role": "documentation"
+    },
+    {
+      "path": "README.ru.md",
+      "blob": "39d367ca1aa5f53ff96daa536d263ef67e0c8df5",
+      "bytes": 6858,
+      "role": "documentation"
+    },
+    {
+      "path": "SECURITY.md",
+      "blob": "19bd786f78b645ab7dbaf67a44bdc4121ade362b",
+      "bytes": 2054,
+      "role": "documentation"
     },
     {
       "path": "tests/run-long-recovery.js",
@@ -225,6 +255,12 @@
       "blob": "e34589949a435c084f588dd3f8db870738c43fee",
       "bytes": 5225,
       "role": "regression_test"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "blob": "d32fd35a396e7eaa51d0848f95b0e0ad5fa5e5be",
+      "bytes": 1166,
+      "role": "documentation"
     },
     {
       "path": "tools/agent_history.py",
