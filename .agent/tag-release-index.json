@@ -1,0 +1,298 @@
+{
+  "schema": "tag-release-index-v1",
+  "snapshot_date": "2026-10-07",
+  "repository": "Ai-b0ss/chatgpt-429-conversation-recovery",
+  "visibility_context": "public-repository-self-history-only",
+  "privacy_note": "Contains only tags/releases/assets already public in this repository. Does not expose private account topology.",
+  "completeness": {
+    "tag_count": 6,
+    "release_count": 6,
+    "source": "live Git refs/tags namespace + GitHub Releases API",
+    "complete": true
+  },
+  "rules": [
+    "Use target_sha for exact tagged commit/object.",
+    "Release asset digest binds the exact uploaded asset when GitHub provides it.",
+    "Do not infer private account topology from this public index."
+  ],
+  "tags": [
+    {
+      "name": "v0.8.0",
+      "ref_object_sha": "44951b3aead249570f172c55fb28e807aaedf9ef",
+      "ref_object_type": "commit",
+      "target_sha": "44951b3aead249570f172c55fb28e807aaedf9ef",
+      "target_type": "commit",
+      "annotated": false,
+      "tagger": null,
+      "message": null,
+      "tag_chain": []
+    },
+    {
+      "name": "v0.8.1",
+      "ref_object_sha": "aeac71c3060f5c0be4147c318dbde4fbc939b09a",
+      "ref_object_type": "commit",
+      "target_sha": "aeac71c3060f5c0be4147c318dbde4fbc939b09a",
+      "target_type": "commit",
+      "annotated": false,
+      "tagger": null,
+      "message": null,
+      "tag_chain": []
+    },
+    {
+      "name": "v0.8.2",
+      "ref_object_sha": "c65c3ee658f017aa25a848679ddfb5576889c95c",
+      "ref_object_type": "commit",
+      "target_sha": "c65c3ee658f017aa25a848679ddfb5576889c95c",
+      "target_type": "commit",
+      "annotated": false,
+      "tagger": null,
+      "message": null,
+      "tag_chain": []
+    },
+    {
+      "name": "v0.8.3",
+      "ref_object_sha": "b033c0dbbc8ef8c0bb3bde24e0c955eac04135ff",
+      "ref_object_type": "commit",
+      "target_sha": "b033c0dbbc8ef8c0bb3bde24e0c955eac04135ff",
+      "target_type": "commit",
+      "annotated": false,
+      "tagger": null,
+      "message": null,
+      "tag_chain": []
+    },
+    {
+      "name": "v0.8.4",
+      "ref_object_sha": "a836f366a2971f4d302d91b554afeec0f980c965",
+      "ref_object_type": "commit",
+      "target_sha": "a836f366a2971f4d302d91b554afeec0f980c965",
+      "target_type": "commit",
+      "annotated": false,
+      "tagger": null,
+      "message": null,
+      "tag_chain": []
+    },
+    {
+      "name": "v0.9.3",
+      "ref_object_sha": "1ac001f9983db0e8a3652fda1fc35d2e10ccb4cd",
+      "ref_object_type": "commit",
+      "target_sha": "1ac001f9983db0e8a3652fda1fc35d2e10ccb4cd",
+      "target_type": "commit",
+      "annotated": false,
+      "tagger": null,
+      "message": null,
+      "tag_chain": []
+    }
+  ],
+  "releases": [
+    {
+      "id": 403881722,
+      "tag_name": "v0.9.3",
+      "name": "ChatGPT Conversation Availability Guard v0.9.3",
+      "target_commitish": "1ac001f9983db0e8a3652fda1fc35d2e10ccb4cd",
+      "draft": false,
+      "prerelease": false,
+      "immutable": false,
+      "created_at": "2026-10-05T15:42:09Z",
+      "published_at": "2026-10-05T15:45:43Z",
+      "assets": [
+        {
+          "id": 612984715,
+          "name": "chatgpt-conversation-availability-guard-v0.9.3.sha256.txt",
+          "size": 118,
+          "content_type": "text/plain; charset=utf-8",
+          "state": "uploaded",
+          "digest": "sha256:80d5eb692a7a054c10b952af4e9ea30a0eb09c533279d6fc387e1481dd583ff4",
+          "created_at": "2026-10-05T15:45:41Z",
+          "updated_at": "2026-10-05T15:45:42Z",
+          "browser_download_url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/releases/download/v0.9.3/chatgpt-conversation-availability-guard-v0.9.3.sha256.txt"
+        },
+        {
+          "id": 612984714,
+          "name": "chatgpt-conversation-availability-guard-v0.9.3.zip",
+          "size": 19979,
+          "content_type": "application/zip",
+          "state": "uploaded",
+          "digest": "sha256:364041e075c824f8e22892ee7774abea037f6cfa1073931f9e890c0ca3e1b80e",
+          "created_at": "2026-10-05T15:45:41Z",
+          "updated_at": "2026-10-05T15:45:42Z",
+          "browser_download_url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/releases/download/v0.9.3/chatgpt-conversation-availability-guard-v0.9.3.zip"
+        }
+      ]
+    },
+    {
+      "id": 400297076,
+      "tag_name": "v0.8.4",
+      "name": "ChatGPT 429 Guard v0.8.4",
+      "target_commitish": "a836f366a2971f4d302d91b554afeec0f980c965",
+      "draft": false,
+      "prerelease": false,
+      "immutable": false,
+      "created_at": "2026-09-30T17:44:35Z",
+      "published_at": "2026-09-30T17:51:15Z",
+      "assets": [
+        {
+          "id": 601486872,
+          "name": "chatgpt-429-guard-v0.8.4.sha256.txt",
+          "size": 96,
+          "content_type": "text/plain; charset=utf-8",
+          "state": "uploaded",
+          "digest": "sha256:946290e73c24e66686198af47e50bc1395e144cbb9da4ed74f6e1d48da3fe6c9",
+          "created_at": "2026-09-30T17:51:14Z",
+          "updated_at": "2026-09-30T17:51:14Z",
+          "browser_download_url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/releases/download/v0.8.4/chatgpt-429-guard-v0.8.4.sha256.txt"
+        },
+        {
+          "id": 601486869,
+          "name": "chatgpt-429-guard-v0.8.4.zip",
+          "size": 10364,
+          "content_type": "application/zip",
+          "state": "uploaded",
+          "digest": "sha256:6ee0ac2d97c48e530d967516dba09fabd111cbcb1575c8c7f0a0729fbebe321a",
+          "created_at": "2026-09-30T17:51:14Z",
+          "updated_at": "2026-09-30T17:51:14Z",
+          "browser_download_url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/releases/download/v0.8.4/chatgpt-429-guard-v0.8.4.zip"
+        }
+      ]
+    },
+    {
+      "id": 400080350,
+      "tag_name": "v0.8.3",
+      "name": "ChatGPT 429 Guard v0.8.3",
+      "target_commitish": "b033c0dbbc8ef8c0bb3bde24e0c955eac04135ff",
+      "draft": false,
+      "prerelease": false,
+      "immutable": false,
+      "created_at": "2026-09-30T13:26:35Z",
+      "published_at": "2026-09-30T13:34:51Z",
+      "assets": [
+        {
+          "id": 601003656,
+          "name": "chatgpt-429-guard-v0.8.3.sha256.txt",
+          "size": 96,
+          "content_type": "text/plain; charset=utf-8",
+          "state": "uploaded",
+          "digest": "sha256:71953f288a7353e70993583b622c8b3e2878727ff394838ea64b1e8df92e414d",
+          "created_at": "2026-09-30T13:34:50Z",
+          "updated_at": "2026-09-30T13:34:50Z",
+          "browser_download_url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/releases/download/v0.8.3/chatgpt-429-guard-v0.8.3.sha256.txt"
+        },
+        {
+          "id": 601003654,
+          "name": "chatgpt-429-guard-v0.8.3.zip",
+          "size": 9455,
+          "content_type": "application/zip",
+          "state": "uploaded",
+          "digest": "sha256:900bc3c7312d3d7131fce9cb24212d464953b3880417f6a43bc19abeb14c606d",
+          "created_at": "2026-09-30T13:34:50Z",
+          "updated_at": "2026-09-30T13:34:50Z",
+          "browser_download_url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/releases/download/v0.8.3/chatgpt-429-guard-v0.8.3.zip"
+        }
+      ]
+    },
+    {
+      "id": 400006210,
+      "tag_name": "v0.8.2",
+      "name": "ChatGPT 429 Guard v0.8.2",
+      "target_commitish": "main",
+      "draft": false,
+      "prerelease": false,
+      "immutable": false,
+      "created_at": "2026-09-30T12:02:51Z",
+      "published_at": "2026-09-30T12:07:18Z",
+      "assets": [
+        {
+          "id": 600834496,
+          "name": "chatgpt-429-guard-v0.8.2.sha256.txt",
+          "size": 96,
+          "content_type": "text/plain; charset=utf-8",
+          "state": "uploaded",
+          "digest": "sha256:e470eb9d41e28c5e2f24f7d4bcb3884bc01b1dbf1ef4b24c2061a70e81063f17",
+          "created_at": "2026-09-30T12:07:17Z",
+          "updated_at": "2026-09-30T12:07:17Z",
+          "browser_download_url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/releases/download/v0.8.2/chatgpt-429-guard-v0.8.2.sha256.txt"
+        },
+        {
+          "id": 600834497,
+          "name": "chatgpt-429-guard-v0.8.2.zip",
+          "size": 9399,
+          "content_type": "application/zip",
+          "state": "uploaded",
+          "digest": "sha256:aa5ead34b1f8adb65695daecee22e12cc00f4f162575612cd185a1ca00c4d324",
+          "created_at": "2026-09-30T12:07:17Z",
+          "updated_at": "2026-09-30T12:07:17Z",
+          "browser_download_url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/releases/download/v0.8.2/chatgpt-429-guard-v0.8.2.zip"
+        }
+      ]
+    },
+    {
+      "id": 399984646,
+      "tag_name": "v0.8.1",
+      "name": "ChatGPT 429 Guard v0.8.1",
+      "target_commitish": "main",
+      "draft": false,
+      "prerelease": false,
+      "immutable": false,
+      "created_at": "2026-09-30T11:35:21Z",
+      "published_at": "2026-09-30T11:37:28Z",
+      "assets": [
+        {
+          "id": 600778866,
+          "name": "chatgpt-429-guard-v0.8.1.sha256.txt",
+          "size": 96,
+          "content_type": "text/plain; charset=utf-8",
+          "state": "uploaded",
+          "digest": "sha256:8a98cfe75922c2a8e6a3d1c19b9fcc9738200b01bff426581fba37042c90214d",
+          "created_at": "2026-09-30T11:37:27Z",
+          "updated_at": "2026-09-30T11:37:27Z",
+          "browser_download_url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/releases/download/v0.8.1/chatgpt-429-guard-v0.8.1.sha256.txt"
+        },
+        {
+          "id": 600778868,
+          "name": "chatgpt-429-guard-v0.8.1.zip",
+          "size": 9090,
+          "content_type": "application/zip",
+          "state": "uploaded",
+          "digest": "sha256:fbb9b32d7df247de75817c309245199c321a6c96471a3772a27c6e7ba59ed7b4",
+          "created_at": "2026-09-30T11:37:27Z",
+          "updated_at": "2026-09-30T11:37:27Z",
+          "browser_download_url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/releases/download/v0.8.1/chatgpt-429-guard-v0.8.1.zip"
+        }
+      ]
+    },
+    {
+      "id": 399971909,
+      "tag_name": "v0.8.0",
+      "name": "ChatGPT 429 Guard v0.8.0",
+      "target_commitish": "main",
+      "draft": false,
+      "prerelease": false,
+      "immutable": false,
+      "created_at": "2026-09-30T11:17:45Z",
+      "published_at": "2026-09-30T11:19:12Z",
+      "assets": [
+        {
+          "id": 600745154,
+          "name": "chatgpt-429-guard-v0.8.0.sha256.txt",
+          "size": 96,
+          "content_type": "text/plain; charset=utf-8",
+          "state": "uploaded",
+          "digest": "sha256:f96807d56fc907e0980012b6e0144a3f3aa3b9cbdef9d584e1947b397c22a045",
+          "created_at": "2026-09-30T11:19:11Z",
+          "updated_at": "2026-09-30T11:19:11Z",
+          "browser_download_url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/releases/download/v0.8.0/chatgpt-429-guard-v0.8.0.sha256.txt"
+        },
+        {
+          "id": 600745151,
+          "name": "chatgpt-429-guard-v0.8.0.zip",
+          "size": 9074,
+          "content_type": "application/zip",
+          "state": "uploaded",
+          "digest": "sha256:42fb6fe75b75a2cb5d38112fac7eca553b5c8dd7250bad1c560a285cea9f9f70",
+          "created_at": "2026-09-30T11:19:11Z",
+          "updated_at": "2026-09-30T11:19:11Z",
+          "browser_download_url": "https://github.com/Ai-b0ss/chatgpt-429-conversation-recovery/releases/download/v0.8.0/chatgpt-429-guard-v0.8.0.zip"
+        }
+      ]
+    }
+  ]
+}
