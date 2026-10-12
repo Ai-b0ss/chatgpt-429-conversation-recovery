@@ -1,0 +1,114 @@
+name: Verify MISIS official timetable (one-off)
+on:
+  push:
+    branches:
+      - audit/misis-20261012
+permissions:
+  contents: write
+jobs:
+  extract:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned Excel reader
+        run: python -m pip install --disable-pip-version-check requests==2.32.3 xlrd==2.0.2
+      - name: Download timetable and save group-specific extraction
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import subprocess
+          import sys
+          import traceback
+          from pathlib import Path
+          from datetime import datetime, timezone
+          
+          import requests
+          import xlrd
+          
+          GROUP = "ББИ-26-6-2"
+          SOURCES = [
+              "https://misis.ru/files/-/78e54f7f680db8ec59b3e22308ac792c/itkn-081026.xls",
+              "https://misis.ru/upload/Student/raspisanie/Institut_kompyuternykh_nauk.xls",
+          ]
+          OUT = Path("misis-audit-20261012.json")
+          result = {"group": GROUP, "checked_at_utc": datetime.now(timezone.utc).isoformat(), "status": "error",
+                    "sources": [], "sheets": [], "matches": [], "records": []}
+          try:
+              binary = None
+              for url in SOURCES:
+                  try:
+                      resp = requests.get(url, timeout=(12, 55), headers={"User-Agent": "Mozilla/5.0 (Academic timetable verification)"})
+                      resp.raise_for_status()
+                      magic = bytes.fromhex("d0cf11e0a1b11ae1")
+                      if not resp.content.startswith(magic):
+                          raise RuntimeError("Not a legacy Excel workbook; first bytes: " + repr(resp.content[:40]))
+                      binary = resp.content
+                      result["source_url"] = url
+                      result["sha256"] = hashlib.sha256(binary).hexdigest()
+                      result["bytes"] = len(binary)
+                      result["sources"].append({"url": url, "status": "download_ok"})
+                      break
+                  except Exception as exc:
+                      result["sources"].append({"url": url, "status": "error", "error": type(exc).__name__ + ": " + str(exc)})
+              if binary is None:
+                  raise RuntimeError("Both official source URLs failed to download")
+              workbook = xlrd.open_workbook(file_contents=binary, formatting_info=True)
+              for sheet in workbook.sheets():
+                  result["sheets"].append({"name": sheet.name, "rows": sheet.nrows, "cols": sheet.ncols})
+                  hits = [(r, c) for r in range(sheet.nrows) for c in range(sheet.ncols)
+                          if str(sheet.cell_value(r, c)).strip() == GROUP]
+                  merges = getattr(sheet, "merged_cells", [])
+                  for header_r, group_c in hits:
+                      result["matches"].append({"sheet": sheet.name, "row": header_r + 1, "column": group_c + 1})
+                      for r in range(header_r + 1, sheet.nrows):
+                          val = str(sheet.cell_value(r, group_c)).strip()
+                          inherited = False
+                          anchor = None
+                          if not val:
+                              for rlo, rhi, clo, chi in merges:
+                                  if rlo <= r < rhi and clo <= group_c < chi and (r != rlo or group_c != clo):
+                                      a = str(sheet.cell_value(rlo, clo)).strip()
+                                      if a and rlo > header_r:
+                                          val = a
+                                          inherited = True
+                                          anchor = [rlo + 1, clo + 1]
+                                          break
+                          prefix = {str(c + 1): str(sheet.cell_value(r, c)).strip() for c in range(min(4, sheet.ncols))
+                                    if str(sheet.cell_value(r, c)).strip()}
+                          if val or prefix:
+                              result["records"].append({"sheet": sheet.name, "row": r + 1,
+                                                      "column": group_c + 1, "prefix": prefix,
+                                                      "value": val, "merged_inherited": inherited,
+                                                      "merge_anchor": anchor})
+              if not result["matches"]:
+                  raise RuntimeError("Group not found in workbook")
+              result["status"] = "ok"
+          except Exception as exc:
+              result["error"] = type(exc).__name__ + ": " + str(exc)
+              result["traceback"] = traceback.format_exc()[-4000:]
+          
+          OUT.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+          print("RESULT_STATUS:", result["status"])
+          print("SOURCES:", json.dumps(result["sources"], ensure_ascii=False))
+          print("WORKSHEETS:", json.dumps(result["sheets"], ensure_ascii=False))
+          print("GROUP_MATCHES:", json.dumps(result["matches"], ensure_ascii=False))
+          print("OUTPUT_RECORDS:", len(result["records"]))
+          subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
+          subprocess.run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], check=True)
+          subprocess.run(["git", "add", str(OUT)], check=True)
+          change = subprocess.run(["git", "diff", "--cached", "--quiet"])
+          if change.returncode:
+              subprocess.run(["git", "commit", "-m", "audit: store official MISIS timetable extraction result"], check=True)
+              subprocess.run(["git", "push", "origin", "HEAD:refs/heads/audit/misis-20261012"], check=True)
+          if result["status"] != "ok":
+              sys.exit(1)
+          PY
