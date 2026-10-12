@@ -87,6 +87,7 @@ jobs:
                           if val or prefix:
                               result["records"].append({"sheet": sheet.name, "row": r + 1,
                                                       "column": group_c + 1, "prefix": prefix,
+                                                      "group_cells": {str(c + 1): str(sheet.cell_value(r, c)).strip() for c in range(group_c, min(sheet.ncols, group_c + 4)) if str(sheet.cell_value(r, c)).strip()},
                                                       "value": val, "merged_inherited": inherited,
                                                       "merge_anchor": anchor})
               if not result["matches"]:
