@@ -1,8 +1,14 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT Conversation Availability Guard",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "Mitigates transient HTTP 429 failures on ChatGPT conversation reads and captures safe diagnostics for chat-unavailable failures. Unofficial.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "permissions": ["storage", "webRequest"],
   "background": {
     "service_worker": "background.js"
@@ -23,6 +29,12 @@
   "host_permissions": ["https://chatgpt.com/*"],
   "action": {
     "default_title": "ChatGPT Conversation Availability Guard",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   }
 }

@@ -8,9 +8,9 @@ Unofficial Chrome extension for recovering ChatGPT conversations that fail to lo
 
 Search/error wording: **“This chat is unavailable”**, **“Unable to load this conversation”**, **“Failed to load conversation”**, **“Chat unavailable”**, **HTTP 429 / Too Many Requests**, **«Этот чат недоступен»**, and **«Не удалось загрузить этот разговор ChatGPT»**.
 
-**Latest stable release:** ChatGPT Conversation Availability Guard v0.9.3.
+**Latest stable release:** ChatGPT Conversation Availability Guard v0.9.4.
 
-v0.8.4 reduced duplicate conversation reads and recovered several deterministic transient-429 scenarios, but it did **not** prevent a real confirmed 429-backed recurrence after prolonged ordinary ChatGPT use. A local v0.9.0 build later added bounded lost-stream resume recovery without changing the v0.8.4 429 Guard itself. A 2026-10-05 production reproduction then identified the critical surface directly: GET conversation-detail returned real HTTP 429 responses with no Retry-After, while the server remained rate-limited for roughly 2.5 minutes. v0.9.3 therefore keeps that safe production GET pending in a bounded five-minute sparse-retry window instead of exposing the early 429 to React.
+v0.9.4 introduces AbortSignal multiplexing for React 18 concurrent renders, handles transient 502/503/504 gateway timeouts from Cloudflare/Envoy during OpenAI traffic spikes, adds subtle in-DOM status toasts for multi-second recoveries, softens user-abort cooldowns, incorporates official store icons, and includes automated Chrome Web Store packaging (`npm run pack`).
 
 > This project does **not** bypass OpenAI rate limits or subscription limits. It only reduces unnecessary client-side retry pressure, respects server Retry-After, and tries to keep transient conversation-read failures from immediately degrading the UI.
 
@@ -23,14 +23,16 @@ A later real-world recurrence showed that v0.8.4 was still incomplete: ChatGPT a
 The current approach is conservative:
 
 - actively protect only safe/idempotent conversation GET reads;
-- deduplicate identical concurrent reads;
-- coordinate cooldowns across tabs;
+- multiplex concurrent React 18 reads so background unmounts do not abort active views;
+- retry transient 502, 503, and 504 gateway spikes alongside 429 rate limits;
+- coordinate cooldowns across tabs with Web Locks;
 - honor Retry-After;
+- notify users with a clean status toast if recovery takes longer than 3 seconds;
 - keep production conversation-detail recovery bounded by a five-minute elapsed-time window with sparse backoff;
 - observe related POST failures without replaying them;
 - keep a small local, privacy-filtered event history so the next real failure identifies the request surface.
 
-## What v0.9.3 actively protects
+## What v0.9.4 actively protects
 
 Traffic-changing protection is limited to safe GET requests:
 
@@ -38,8 +40,6 @@ Traffic-changing protection is limited to safe GET requests:
 - GET /backend-api/conversation/{id}
 - GET /backend-api/conversation/{id}/stream_status
 - GET /backend-api/conversations
-
-Active 429 protection for stream_status is new in v0.9.3. The local v0.9.0 stream-recovery layer could observe stream status for resume recovery, but the underlying 429 Guard still let a stream_status 429 pass through without retrying it.
 
 Related POST surfaces such as:
 
@@ -58,29 +58,35 @@ The local rows are deterministic recovery simulations. The final row records the
 | Scenario | Result |
 |---|---:|
 | Five identical simultaneous reads | 2 network calls; all callers recover |
+| React 18 AbortSignal multiplexing | aborting one listener leaves the active view intact |
+| Transient 504 Gateway Timeout (Cloudflare) | recovered transparently without failing to React |
 | stream_status: first response 429, second 200 | recovered with 2 network calls |
 | Transient two-429 conversation-detail case | recovered within the UI test budget |
 | Retry-After: 14 | second attempt waits for the server-directed delay |
 | resume / batch / init POST 429 | one call only; observed, not replayed |
-| Cross-tab same-conversation reads | serialized/deduplicated |
+| Cross-tab same-conversation reads | serialized/deduplicated via Web Locks |
 | Copied/stored diagnostics | no full URLs, conversation IDs, tab IDs or correlation hashes |
-| Live chatgpt.com conversation-detail 429 | old budget failed in ~6s; server recovered after ~2.5 min; v0.9.3 window is 5 min |
+| Live chatgpt.com conversation-detail 429 | old budget failed in ~6s; server recovered after ~2.5 min; v0.9.4 window is 5 min |
 
 ## Install
 
 For a published build:
 
-1. Download the latest ZIP from Releases.
+1. Download the latest ZIP (`chatgpt-conversation-availability-guard-v0.9.4.zip`) from Releases.
 2. Extract it somewhere permanent.
-3. Open chrome://extensions.
+3. Open `chrome://extensions`.
 4. Enable Developer mode.
-5. Click Load unpacked.
-6. Select the extracted extension folder.
+5. Click **Load unpacked**.
+6. Select the extracted `extension` folder.
 7. Reload open ChatGPT tabs.
 
 Chrome must keep that folder in place while the unpacked extension is installed.
 
-v0.9.3 is published and is the current stable build. The release passed both the standard regression suite and the production-origin long-429 recovery gate.
+v0.9.4 is published and is the current stable build. The release passed both the standard 29-check regression suite and the production-origin long-429 recovery gate.
+
+Store submission guide and promotion materials:
+- [Chrome Web Store Listing Guide](docs/CHROME_STORE_LISTING.md)
+- [Promotion & Launch Playbook](docs/PROMOTION_AND_LAUNCH.md)
 
 ## Using it
 
@@ -123,15 +129,22 @@ A terminal 429 can still escape to ChatGPT after the bounded retry budget. That 
 
 The repository is named **chatgpt-429-conversation-recovery** so people searching for the actual failure — ChatGPT 429, “This chat is unavailable”, or conversation recovery — can find it. The installed extension keeps the product name **ChatGPT Conversation Availability Guard**.
 
-## Development
+## Development & Packaging
 
 The extension has no runtime dependencies.
 
-Maintainer regression tests use Playwright and a local synthetic server only. Run npm install, install the Playwright Chromium browser, then run npm test.
+Maintainer regression tests use Playwright and a local synthetic server only:
+```bash
+npm install
+npm test            # Run 29-check full regression suite
+npm run test:long   # Run 45s long rate-limit recovery test
+npm run icons       # Regenerate PNG icons from SVG using headless Playwright
+npm run pack        # Build production release ZIP into dist/
+```
 
 No regression test should make a live request to ChatGPT/OpenAI or use a real account session.
 
-The current suites cover 429 concurrency/backoff, non-target and POST passthrough, aborts, Request objects, Retry-After, stream-status recovery, terminal 429 diagnostics, two-tab coordination, passive POST diagnostics, diagnostic privacy, and the bounded resume-404 recovery path inherited from the local v0.9.0 build.
+The current suites cover 429 concurrency/backoff, transient 504 gateway recovery, AbortSignal multiplexing, non-target and POST passthrough, aborts, Request objects, Retry-After, stream-status recovery, terminal 429 diagnostics, two-tab coordination, passive POST diagnostics, diagnostic privacy, and the bounded resume-404 recovery path inherited from the local v0.9.0 build.
 
 ## Reporting a problem
 

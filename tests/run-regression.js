@@ -5,7 +5,7 @@ const {spawn}=require('child_process');
 const {chromium}=require('playwright');
 
 const repo=path.resolve(__dirname,'..');
-const profile=path.join(os.tmpdir(),'chatgpt-429-guard-regression-profile');
+const profile=path.join(os.tmpdir(),'chatgpt-429-guard-regression-profile-'+process.pid);
 const ext=path.join(os.tmpdir(),'chatgpt-429-guard-regression-extension');
 const base='http://127.0.0.1:9342';
 const out=path.join(__dirname,'regression-result.json');
@@ -64,7 +64,7 @@ async function clearGuardCooldowns(page){
 
 (async()=>{
   await waitServer();
-  fs.rmSync(profile,{recursive:true,force:true});
+  try{fs.rmSync(profile,{recursive:true,force:true});}catch{}
   const context=await chromium.launchPersistentContext(profile,{
     headless:false,
     args:[
@@ -370,9 +370,52 @@ async function clearGuardCooldowns(page){
   results.streamObserverStatus=await page.evaluate(()=>
     typeof __CGUARD_STREAM_STATUS__==='function' ? __CGUARD_STREAM_STATUS__() : null
   );
+
+  await clearGuardCooldowns(page);
+  await reset(context.request);
+  t0=Date.now();
+  const res504=await page.evaluate(async base=>(await fetch(
+    base+'/backend-api/conversations/transient-504'
+  )).status,base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'transient_504_recovery',
+    status:res504,
+    elapsedMs:Date.now()-t0,
+    networkCalls:st.counts['GET /backend-api/conversations/transient-504']||0
+  });
+
+  await clearGuardCooldowns(page);
+  await reset(context.request);
+  t0=Date.now();
+  const multiplexRes=await page.evaluate(async base=>{
+    const c1=new AbortController();
+    const c2=new AbortController();
+    const url=base+'/backend-api/conversations/multiplex-abort';
+    const p1=fetch(url,{signal:c1.signal})
+      .then(r=>({id:'c1',ok:true,status:r.status}))
+      .catch(e=>({id:'c1',ok:false,name:e.name||'AbortError'}));
+    const p2=fetch(url,{signal:c2.signal})
+      .then(r=>({id:'c2',ok:true,status:r.status}))
+      .catch(e=>({id:'c2',ok:false,name:e.name}));
+    setTimeout(()=>c1.abort('caller1-abort'),50);
+    return await Promise.all([p1,p2]);
+  },base);
+  st=await state(context.request);
+  results.tests.push({
+    name:'abort_signal_multiplexing',
+    caller1Aborted:multiplexRes[0].ok===false,
+    caller2Succeeded:multiplexRes[1].ok===true && multiplexRes[1].status===200,
+    networkCalls:st.counts['GET /backend-api/conversations/multiplex-abort']||0
+  });
+
   const byName=Object.fromEntries(results.tests.map(t=>[t.name,t]));
   const checks={
     fiveConcurrent:byName.five_concurrent.networkCalls===2 && byName.five_concurrent.statuses.every(x=>x===200),
+    transient504:byName.transient_504_recovery.networkCalls===3 && byName.transient_504_recovery.status===200,
+    multiplexAbort:byName.abort_signal_multiplexing.caller1Aborted===true &&
+      byName.abort_signal_multiplexing.caller2Succeeded===true &&
+      byName.abort_signal_multiplexing.networkCalls===1,
     nonTarget:byName.non_target_passthrough.networkCalls===1 && byName.non_target_passthrough.status===429,
     post:byName.post_passthrough.networkCalls===1 && byName.post_passthrough.status===429,
     resumePassive:byName.resume_passthrough.networkCalls===1 && byName.resume_passthrough.status===429,

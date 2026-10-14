@@ -1,6 +1,20 @@
 # Changelog
 
-## 0.9.3 — Unreleased
+## 0.9.4 — 2026-10-14
+
+Production hardening, React 18 concurrency support, and Chrome Web Store packaging.
+
+- Implements AbortSignal multiplexing: concurrent conversation reads share an internal master controller and independent cloned responses; component unmounts do not abort inflight recovery for active viewers.
+- Adds transient Cloudflare/Envoy gateway protection (HTTP 502, 503, 504) with bounded jittered retries during OpenAI traffic spikes.
+- Softens user-cancellation penalties: aborting one conversation now isolates cooldown strictly to that conversation rather than throttling all tabs for 12 seconds.
+- Adds an in-DOM status toast notice when recovery takes longer than 3 seconds to keep users informed without frozen screens.
+- Adds bounded 429 backoff handling to lost-stream resume recovery in `stream-observer.js`.
+- Generates official icons (16, 32, 48, 128 px) from vector SVG.
+- Adds automated release packaging tool (`tools/build-dist.js`, `npm run pack`) creating clean Chrome Web Store zip bundles in `dist/`.
+- Prepares complete Chrome Web Store listing metadata and community promotion playbooks.
+- Passes all 29 regression tests and the 45s continuous 429 recovery gate.
+
+## 0.9.3 — 2026-10-05
 
 Production 429 recovery fix based on the 2026-10-05 live ChatGPT reproduction.
 

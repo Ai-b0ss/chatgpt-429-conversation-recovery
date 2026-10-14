@@ -2,276 +2,336 @@
   "schema": "agent-file-index-v2",
   "repository": "Ai-b0ss/chatgpt-429-conversation-recovery",
   "branch": "main",
-  "self_indexing": "`.agent/file-index.json` is intentionally omitted to avoid recursive self-staleness.",
+  "self_indexing": ".agent/file-index.json is intentionally omitted to avoid recursive self-staleness.",
   "files": [
+    {
+      "path": ".agent/README.md",
+      "blob": "c57c6a47ad5a0badf634cfc8e2a006a1ef30e344",
+      "bytes": 1594,
+      "role": "agent_tooling"
+    },
     {
       "path": ".agent/branch-index.json",
       "blob": "c16bf1932fac29e26761a7f648a948a481829974",
-      "bytes": 1957,
+      "bytes": 2017,
       "role": "agent_tooling"
     },
     {
       "path": ".agent/github-objects-index.json",
       "blob": "1920d467f0f4377165eb192064daabc999f3b446",
-      "bytes": 1809,
+      "bytes": 1866,
       "role": "agent_tooling"
     },
     {
       "path": ".agent/lineage-index.json",
       "blob": "fa58bfec33704256ef3b80631242f30da3361bc9",
-      "bytes": 984,
+      "bytes": 1016,
       "role": "agent_tooling"
     },
     {
       "path": ".agent/pr-ledger.json",
       "blob": "a190b2ad91ba3fac67a940ded8030f41ac8fcb61",
-      "bytes": 1553,
-      "role": "agent_tooling"
-    },
-    {
-      "path": ".agent/README.md",
-      "blob": "c57c6a47ad5a0badf634cfc8e2a006a1ef30e344",
-      "bytes": 1549,
+      "bytes": 1594,
       "role": "agent_tooling"
     },
     {
       "path": ".agent/tag-release-index.json",
       "blob": "46b30c948b47351073ac1f577020331e744f91db",
-      "bytes": 11528,
+      "bytes": 11826,
       "role": "agent_tooling"
     },
     {
       "path": ".cursor/rules/repository-navigation.mdc",
       "blob": "0794e048f55abf3590390c38b5c75db9f5efc54b",
-      "bytes": 658,
+      "bytes": 672,
       "role": "agent_tooling"
     },
     {
       "path": ".github/CODEOWNERS",
       "blob": "7a7e75ffa863f70ef65dc9c417dab71894d4789a",
-      "bytes": 11,
-      "role": "project_automation"
-    },
-    {
-      "path": ".github/copilot-instructions.md",
-      "blob": "1efac671cf6ddc5cdfdeb279bcd19e2bebc30014",
-      "bytes": 574,
-      "role": "agent_tooling"
-    },
-    {
-      "path": ".github/dependabot.yml",
-      "blob": "dd530947831021bf02b472f6e0378cad3c97905a",
-      "bytes": 133,
+      "bytes": 12,
       "role": "project_automation"
     },
     {
       "path": ".github/ISSUE_TEMPLATE/429.yml",
       "blob": "5824c83a2c8279f6af7cbd77c5799b06ee328044",
-      "bytes": 1347,
+      "bytes": 1393,
+      "role": "project_automation"
+    },
+    {
+      "path": ".github/copilot-instructions.md",
+      "blob": "1efac671cf6ddc5cdfdeb279bcd19e2bebc30014",
+      "bytes": 585,
+      "role": "agent_tooling"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "blob": "dd530947831021bf02b472f6e0378cad3c97905a",
+      "bytes": 140,
       "role": "project_automation"
     },
     {
       "path": ".github/workflows/regression.yml",
       "blob": "42a83043f4d15636c1ab1ed80a4e959232d694bf",
-      "bytes": 735,
+      "bytes": 763,
       "role": "project_automation"
     },
     {
       "path": ".gitignore",
-      "blob": "609d76035d218310823767f161751a79c4696a39",
-      "bytes": 114,
+      "blob": "2d218c897b50791d4ea23dff4601115b9ab7901c",
+      "bytes": 128,
       "role": "project_file"
     },
     {
       "path": "AGENTS.md",
       "blob": "6426138e28d3b44b9f58fb2bfe1eb44206a60de7",
-      "bytes": 3611,
+      "bytes": 3657,
       "role": "agent_tooling"
     },
     {
       "path": "CHANGELOG.md",
-      "blob": "c5f05094927a7517e5ffd9e96f86895f4debf8b0",
-      "bytes": 7068,
+      "blob": "1daad457a9a137832aa5a42de6dd0668b9c05714",
+      "bytes": 8368,
       "role": "documentation"
     },
     {
       "path": "CLAUDE.md",
       "blob": "c92840b89e49539ec1da2f95060d962a0687fd17",
-      "bytes": 703,
+      "bytes": 714,
       "role": "agent_tooling"
     },
     {
       "path": "CONTRIBUTING.md",
       "blob": "b36efea4cef3089e9334d9cc7dffac00f16779bc",
-      "bytes": 767,
+      "bytes": 786,
       "role": "documentation"
-    },
-    {
-      "path": "docs/429-recovery-design.md",
-      "blob": "b42cf200e8163456233acf681b65a83f1df9e63d",
-      "bytes": 2080,
-      "role": "design_or_audit"
-    },
-    {
-      "path": "docs/ACCOUNT_CONTEXT.md",
-      "blob": "e230771f9481ff257e936499d4499ca12be17687",
-      "bytes": 1079,
-      "role": "documentation"
-    },
-    {
-      "path": "docs/AGENT_NAVIGATION.md",
-      "blob": "24dd4389df757b101ecd3b24d8721f028d98ad72",
-      "bytes": 1816,
-      "role": "agent_tooling"
-    },
-    {
-      "path": "docs/AGENT_OPERATING_SYSTEM.md",
-      "blob": "af38acde0af01b974d90d1c7b7ef9a7a63a6a72b",
-      "bytes": 10450,
-      "role": "agent_tooling"
-    },
-    {
-      "path": "docs/LINEAGE_CONTEXT.md",
-      "blob": "2ff98a09679e17e362735e65440700d27d544e42",
-      "bytes": 1624,
-      "role": "documentation"
-    },
-    {
-      "path": "docs/REPOSITORY_INVENTORY.md",
-      "blob": "821e72bb92ca64bea39829d05b35b49d194205ad",
-      "bytes": 3756,
-      "role": "agent_tooling"
-    },
-    {
-      "path": "docs/upstream-tech-audit.md",
-      "blob": "94403db97529f9f5f4c99b094b6625be134c8ced",
-      "bytes": 4001,
-      "role": "design_or_audit"
-    },
-    {
-      "path": "extension/background.js",
-      "blob": "0e20e55743b49aeb9d62896dfa86a2680f770880",
-      "bytes": 6477,
-      "role": "extension_runtime"
-    },
-    {
-      "path": "extension/bridge.js",
-      "blob": "0c3c3a9b802e00c7c64c46ce0dae5cf62be3578e",
-      "bytes": 1483,
-      "role": "extension_runtime"
-    },
-    {
-      "path": "extension/control.js",
-      "blob": "cc664918bf5214d2315101d0fdda121dc00c238e",
-      "bytes": 633,
-      "role": "extension_runtime"
-    },
-    {
-      "path": "extension/guard.js",
-      "blob": "b2fb4c2d73d4b1c5fa2ac04363a2b4f7bb37b121",
-      "bytes": 21976,
-      "role": "extension_runtime"
-    },
-    {
-      "path": "extension/manifest.json",
-      "blob": "e0dda452c92669f02745445f6cd4d161f6bbcc1c",
-      "bytes": 854,
-      "role": "extension_runtime"
-    },
-    {
-      "path": "extension/popup.html",
-      "blob": "6f23449205140e7d10a393cd98068bc6fb27d1b2",
-      "bytes": 1114,
-      "role": "extension_runtime"
-    },
-    {
-      "path": "extension/popup.js",
-      "blob": "f11deb761604581392fdf3540a0d2ba6f5757356",
-      "bytes": 5174,
-      "role": "extension_runtime"
-    },
-    {
-      "path": "extension/stream-observer.js",
-      "blob": "bdb8f8f42efe3b4f55f371fae6bec4108ed28d50",
-      "bytes": 35862,
-      "role": "extension_runtime"
     },
     {
       "path": "GEMINI.md",
       "blob": "9a0eeffd26f59d4b73fba0d17bcd5d128677b043",
-      "bytes": 588,
+      "bytes": 600,
       "role": "agent_tooling"
     },
     {
       "path": "LICENSE",
       "blob": "26e4326e15edc39253f6a276f2e3c063971435a1",
-      "bytes": 1076,
+      "bytes": 1096,
       "role": "documentation"
     },
     {
-      "path": "package-lock.json",
-      "blob": "d1a7e32241fcb60d5807dbcbf559a8c73a0f1b45",
-      "bytes": 1243,
-      "role": "project_file"
-    },
-    {
-      "path": "package.json",
-      "blob": "1a44efaca147f3e5888f6d84f8086a6e7992cd83",
-      "bytes": 370,
-      "role": "project_file"
-    },
-    {
       "path": "README.md",
-      "blob": "1a734e3fbdb7f83415d99809766d253dfe723d22",
-      "bytes": 9691,
+      "blob": "a37824226c68107089e2fb4385f95d1cb1573496",
+      "bytes": 10247,
       "role": "documentation"
     },
     {
       "path": "README.ru.md",
-      "blob": "39d367ca1aa5f53ff96daa536d263ef67e0c8df5",
-      "bytes": 6858,
+      "blob": "b63efeb98c911b42d7df7aff5882d87564631138",
+      "bytes": 7270,
       "role": "documentation"
     },
     {
       "path": "SECURITY.md",
       "blob": "19bd786f78b645ab7dbaf67a44bdc4121ade362b",
-      "bytes": 2054,
+      "bytes": 2092,
       "role": "documentation"
-    },
-    {
-      "path": "tests/run-long-recovery.js",
-      "blob": "7f833afd948456df57dcae67ec3e4e7df88e1be1",
-      "bytes": 4725,
-      "role": "regression_test"
-    },
-    {
-      "path": "tests/run-regression.js",
-      "blob": "cb5344c2d6a67b49ef66c61148053d5305eb5278",
-      "bytes": 20153,
-      "role": "regression_test"
-    },
-    {
-      "path": "tests/server.py",
-      "blob": "e34589949a435c084f588dd3f8db870738c43fee",
-      "bytes": 5225,
-      "role": "regression_test"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
       "blob": "d32fd35a396e7eaa51d0848f95b0e0ad5fa5e5be",
-      "bytes": 1166,
+      "bytes": 1180,
       "role": "documentation"
+    },
+    {
+      "path": "docs/429-recovery-design.md",
+      "blob": "b42cf200e8163456233acf681b65a83f1df9e63d",
+      "bytes": 2111,
+      "role": "design_or_audit"
+    },
+    {
+      "path": "docs/ACCOUNT_CONTEXT.md",
+      "blob": "e230771f9481ff257e936499d4499ca12be17687",
+      "bytes": 1101,
+      "role": "documentation"
+    },
+    {
+      "path": "docs/AGENT_NAVIGATION.md",
+      "blob": "24dd4389df757b101ecd3b24d8721f028d98ad72",
+      "bytes": 1839,
+      "role": "agent_tooling"
+    },
+    {
+      "path": "docs/AGENT_OPERATING_SYSTEM.md",
+      "blob": "af38acde0af01b974d90d1c7b7ef9a7a63a6a72b",
+      "bytes": 10736,
+      "role": "agent_tooling"
+    },
+    {
+      "path": "docs/CHROME_STORE_LISTING.md",
+      "blob": "7deee81724e6eb57b03dd90e92911c6c5746959d",
+      "bytes": 9847,
+      "role": "documentation"
+    },
+    {
+      "path": "docs/LINEAGE_CONTEXT.md",
+      "blob": "2ff98a09679e17e362735e65440700d27d544e42",
+      "bytes": 1660,
+      "role": "documentation"
+    },
+    {
+      "path": "docs/PROMOTION_AND_LAUNCH.md",
+      "blob": "0913f59787dd54be75cd6cb4f5caa7504d987da6",
+      "bytes": 10192,
+      "role": "documentation"
+    },
+    {
+      "path": "docs/REPOSITORY_INVENTORY.md",
+      "blob": "821e72bb92ca64bea39829d05b35b49d194205ad",
+      "bytes": 3877,
+      "role": "agent_tooling"
+    },
+    {
+      "path": "docs/upstream-tech-audit.md",
+      "blob": "94403db97529f9f5f4c99b094b6625be134c8ced",
+      "bytes": 4044,
+      "role": "design_or_audit"
+    },
+    {
+      "path": "extension/background.js",
+      "blob": "0e20e55743b49aeb9d62896dfa86a2680f770880",
+      "bytes": 6689,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/bridge.js",
+      "blob": "0c3c3a9b802e00c7c64c46ce0dae5cf62be3578e",
+      "bytes": 1524,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/control.js",
+      "blob": "cc664918bf5214d2315101d0fdda121dc00c238e",
+      "bytes": 647,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/guard.js",
+      "blob": "344d0078918ec95eb06036d978cf1af0dfa08997",
+      "bytes": 26815,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/icons/icon-128.png",
+      "blob": "a28e5c172409c5dec947c4b70761bd0a47984828",
+      "bytes": 11696,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/icons/icon-16.png",
+      "blob": "96b8b13c3c5e8f5021aea2fcb699646a76e9287a",
+      "bytes": 728,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/icons/icon-32.png",
+      "blob": "605e96892d0b8b2ba7e1a001450ef337114cdc2b",
+      "bytes": 1701,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/icons/icon-48.png",
+      "blob": "321d93f3aad8c7b70d637d6958784921ddcc374f",
+      "bytes": 2939,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/icons/icon.svg",
+      "blob": "08f9c9c0bae3c53daec89bda5aff6d9a1704bf32",
+      "bytes": 2126,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/manifest.json",
+      "blob": "c04643cdbf94fd0bb601e522a903dda272a4398f",
+      "bytes": 1159,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/popup.html",
+      "blob": "6f23449205140e7d10a393cd98068bc6fb27d1b2",
+      "bytes": 1135,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/popup.js",
+      "blob": "f11deb761604581392fdf3540a0d2ba6f5757356",
+      "bytes": 5318,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "extension/stream-observer.js",
+      "blob": "fa411632191a509116b1843cdf385d491728c7ad",
+      "bytes": 37734,
+      "role": "extension_runtime"
+    },
+    {
+      "path": "package-lock.json",
+      "blob": "d1a7e32241fcb60d5807dbcbf559a8c73a0f1b45",
+      "bytes": 1287,
+      "role": "project_file"
+    },
+    {
+      "path": "package.json",
+      "blob": "3696e00ccc9fa8984c48cb6800580735f5d8bfbf",
+      "bytes": 477,
+      "role": "project_file"
+    },
+    {
+      "path": "tests/run-long-recovery.js",
+      "blob": "7f833afd948456df57dcae67ec3e4e7df88e1be1",
+      "bytes": 4869,
+      "role": "regression_test"
+    },
+    {
+      "path": "tests/run-regression.js",
+      "blob": "a561522ebbbccd7fa6f38d85c5ddf96deb7cc749",
+      "bytes": 22428,
+      "role": "regression_test"
+    },
+    {
+      "path": "tests/server.py",
+      "blob": "de4935573d9a79845e1c87aa1e362ee9ca5b0f2b",
+      "bytes": 5933,
+      "role": "regression_test"
     },
     {
       "path": "tools/agent_history.py",
       "blob": "e5bafa35894387de114935bbcd88607b7074851e",
-      "bytes": 14293,
+      "bytes": 14815,
+      "role": "agent_tooling"
+    },
+    {
+      "path": "tools/build-dist.js",
+      "blob": "e84e3f98a7bda891999690d1d19d7c39684b0482",
+      "bytes": 2945,
       "role": "agent_tooling"
     },
     {
       "path": "tools/build_agent_index.py",
       "blob": "9ad5e056e09909d4eeb0735e479d8cff7cd8a446",
-      "bytes": 4539,
+      "bytes": 4671,
+      "role": "agent_tooling"
+    },
+    {
+      "path": "tools/generate-icons.js",
+      "blob": "cba55c1c064636cc3b479a55663436c6fc186b14",
+      "bytes": 1830,
+      "role": "agent_tooling"
+    },
+    {
+      "path": "tools/pack-zip.py",
+      "blob": "f9ad59e3c8511b5149cd8d94436959ab910a8610",
+      "bytes": 998,
       "role": "agent_tooling"
     }
   ]

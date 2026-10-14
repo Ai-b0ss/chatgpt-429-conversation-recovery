@@ -5,3 +5,4 @@ tests/long-recovery-result.json
 Thumbs.db
 *.log
 __pycache__/
+dist/

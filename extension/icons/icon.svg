@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10a37f" />
+      <stop offset="50%" stop-color="#0d8a6a" />
+      <stop offset="100%" stop-color="#065f46" />
+    </linearGradient>
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#047857" stop-opacity="0.3" />
+    </linearGradient>
+    <linearGradient id="bubbleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e6f7f0" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <!-- Outer Shield Shadow & Body -->
+  <path d="M 64 10 
+           C 88 10, 108 18, 112 28 
+           C 112 60, 96 94, 64 118 
+           C 32 94, 16 60, 16 28 
+           C 20 18, 40 10, 64 10 Z" 
+        fill="url(#shieldGrad)" 
+        stroke="url(#rimGrad)" 
+        stroke-width="3"
+        filter="url(#shadow)" />
+
+  <!-- Chat Bubble Background -->
+  <path d="M 40 38 
+           H 88 
+           A 12 12 0 0 1 100 50 
+           V 72 
+           A 12 12 0 0 1 88 84 
+           H 58 
+           L 44 96 
+           L 46 84 
+           H 40 
+           A 12 12 0 0 1 28 72 
+           V 50 
+           A 12 12 0 0 1 40 38 Z" 
+        fill="url(#bubbleGrad)" />
+
+  <!-- Availability Pulse Line (Recovery & Health) -->
+  <path d="M 38 61 
+           L 49 61 
+           L 55 49 
+           L 63 73 
+           L 71 53 
+           L 77 65 
+           L 81 61 
+           L 90 61" 
+        fill="none" 
+        stroke="#0d8a6a" 
+        stroke-width="5" 
+        stroke-linecap="round" 
+        stroke-linejoin="round" />
+
+  <!-- Guard Checkmark / Status Dot -->
+  <circle cx="89" cy="43" r="5" fill="#10a37f" />
+  <circle cx="89" cy="43" r="3" fill="#34d399" />
+</svg>

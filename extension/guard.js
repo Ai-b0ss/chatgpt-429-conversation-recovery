@@ -4,7 +4,7 @@
   if (window.__CGUARD_INSTALLED__) return;
   window.__CGUARD_INSTALLED__ = true;
 
-  const nativeFetch = window.fetch.bind(window);
+  let nativeFetch = window.fetch.bind(window);
   const pending = new Map();
   const cooldown = new Map();
   const hardCooldown = new Map();
@@ -26,7 +26,7 @@
   // A real ChatGPT conversation-detail 429 can outlive the short UI retry
   // budget by minutes. Keep that safe GET pending instead of exposing 429
   // to React, which otherwise latches the conversation into "unavailable".
-  const productionDetailRecoveryWindowMs = 5 * 60 * 1000;
+  const productionDetailRecoveryWindowMs = 150 * 1000;
   const productionDetailRecoveryBackoffs = [2000, 4000, 8000, 15000, 30000, 45000, 60000];
   const listTerminalCooldownMs = 30000;
   const disableKey = "chatgpt-429-guard:disable";
@@ -34,15 +34,17 @@
   const hardCooldownStoragePrefix = "chatgpt-429-guard:hard-cooldown:";
 
   const metrics = {
-    version: "0.9.3",
+    version: "0.9.4",
     installedAt: new Date().toISOString(),
     protectedCalls: 0,
     nativeCalls: 0,
     dedupeHits: 0,
     dedupeSignalMismatches: 0,
     retries429: 0,
+    retries5xx: 0,
     successAfter429: 0,
     final429: 0,
+    terminal5xx: 0,
     terminalCooldowns: 0,
     abortedCalls: 0,
     crossTabLocks: 0,
@@ -177,7 +179,12 @@
   };
 
   const abortError = signal => {
-    if (signal && signal.reason) return signal.reason;
+    if (signal && signal.reason) {
+      if (typeof signal.reason === "string") {
+        try { return new DOMException(signal.reason, "AbortError"); } catch {}
+      }
+      return signal.reason;
+    }
     try { return new DOMException("Aborted", "AbortError"); }
     catch {
       const e = new Error("Aborted");
@@ -441,9 +448,44 @@
     await sleep(ms, signal);
   }
 
-  async function guardedFetch(input, init, key, protectedRequest) {
+  let noticeElement = null;
+  const showGuardNotice = text => {
+    try {
+      if (typeof document === "undefined" || !document.body) return;
+      if (!noticeElement) {
+        noticeElement = document.createElement("div");
+        noticeElement.id = "cguard-status-toast";
+        noticeElement.style.cssText =
+          "position:fixed;bottom:24px;right:24px;z-index:999999;background:#10a37f;color:#fff;" +
+          "padding:10px 18px;border-radius:8px;font:13px/1.4 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;" +
+          "box-shadow:0 6px 16px rgba(0,0,0,0.2);display:flex;align-items:center;gap:10px;" +
+          "transition:opacity 0.25s ease;pointer-events:none;font-weight:500;";
+        document.body.appendChild(noticeElement);
+      }
+      noticeElement.textContent = text;
+      noticeElement.style.opacity = "1";
+    } catch {}
+  };
+
+  const hideGuardNotice = () => {
+    try {
+      if (noticeElement) {
+        noticeElement.style.opacity = "0";
+        setTimeout(() => {
+          if (noticeElement && noticeElement.parentNode && noticeElement.style.opacity === "0") {
+            noticeElement.parentNode.removeChild(noticeElement);
+            noticeElement = null;
+          }
+        }, 250);
+      }
+    } catch {}
+  };
+
+  const isTransientStatus = s => s === 429 || s === 502 || s === 503 || s === 504;
+
+  async function guardedFetch(input, init, key, protectedRequest, masterSignal) {
     const { surface } = protectedRequest;
-    const signal = requestSignal(input, init);
+    const signal = masterSignal || requestSignal(input, init);
     const isList = surface === "conversation-list";
     const backoffs = isList ? listBackoffs : detailBackoffs;
     const maxInternalRetries = isList
@@ -470,12 +512,20 @@
       for (let attempt = 0; ; attempt++) {
         metrics.nativeCalls++;
         const started = now();
-        const response = await nativeFetch(input, init);
+        let callInit = init;
+        if (signal) {
+          callInit = init ? { ...init, signal } : { signal };
+        }
+        let callInput = input;
+        if (!init && input instanceof Request && signal) {
+          try { callInput = new Request(input, { signal }); } catch {}
+        }
+        const response = await nativeFetch(callInput, callInit);
         const elapsed = now() - started;
         lastResponse = response;
         metrics.lastStatus = response.status;
 
-        if (response.status !== 429) {
+        if (!isTransientStatus(response.status)) {
           clearCooldown(key);
           failureLevel.delete(key);
           if (saw429) {
@@ -494,12 +544,16 @@
 
         saw429 = true;
         let serverWait = retryAfterMs(response);
+        if (response.status === 429) {
+          metrics.retries429++;
+        } else {
+          metrics.retries5xx = (metrics.retries5xx || 0) + 1;
+        }
 
         const withinLongRecovery = longRecovery &&
           now() - recoveryStarted < productionDetailRecoveryWindowMs;
         if (attempt >= maxInternalRetries && !withinLongRecovery) break;
 
-        metrics.retries429++;
         const level = failureLevel.get(key) || 0;
         const selectedBackoffs = longRecovery
           ? productionDetailRecoveryBackoffs
@@ -523,16 +577,37 @@
         const hardUntil = serverWait > 0 ? now() + serverWait : 0;
         applyRateCooldown(key, softUntil, hardUntil);
         metrics.totalWaitMs += wait;
-        log("429-backoff", {
-          surface,
-          method: "GET",
-          status: 429,
-          protection: "active",
-          elapsedMs: elapsed,
-          attempt,
-          waitMs: wait,
-          retryAfterMs: serverWait
-        });
+
+        if (response.status === 429) {
+          log("429-backoff", {
+            surface,
+            method: "GET",
+            status: 429,
+            protection: "active",
+            elapsedMs: elapsed,
+            attempt,
+            waitMs: wait,
+            retryAfterMs: serverWait
+          });
+        } else {
+          log("5xx-backoff", {
+            surface,
+            method: "GET",
+            status: response.status,
+            protection: "active",
+            elapsedMs: elapsed,
+            attempt,
+            waitMs: wait,
+            retryAfterMs: serverWait
+          });
+        }
+
+        if (attempt > 0) {
+          showGuardNotice(
+            `ChatGPT is temporarily rate-limited. Guard is keeping your chat connected (Attempt ${attempt + 1})...`
+          );
+        }
+
         await sleep(wait, signal);
         if (longRecovery &&
             now() - recoveryStarted >= productionDetailRecoveryWindowMs) {
@@ -540,21 +615,31 @@
         }
       }
 
-      metrics.final429++;
-      metrics.terminalCooldowns++;
-      failureLevel.set(
-        key,
-        (failureLevel.get(key) || 0) + 1
-      );
-      const terminalUntil = now() + terminalCooldownMs;
-      applyRateCooldown(key, terminalUntil);
-      log("429-final", {
-        surface,
-        method: "GET",
-        status: 429,
-        protection: "active",
-        cooldownMs: terminalCooldownMs
-      });
+      if (lastResponse && lastResponse.status === 429) {
+        metrics.final429++;
+        metrics.terminalCooldowns++;
+        failureLevel.set(
+          key,
+          (failureLevel.get(key) || 0) + 1
+        );
+        const terminalUntil = now() + terminalCooldownMs;
+        applyRateCooldown(key, terminalUntil);
+        log("429-final", {
+          surface,
+          method: "GET",
+          status: 429,
+          protection: "active",
+          cooldownMs: terminalCooldownMs
+        });
+      } else if (lastResponse) {
+        metrics.terminal5xx = (metrics.terminal5xx || 0) + 1;
+        log("transient-final", {
+          surface,
+          method: "GET",
+          status: lastResponse.status,
+          protection: "active"
+        });
+      }
       return lastResponse;
     } catch (error) {
       if (signal && signal.aborted) {
@@ -562,7 +647,7 @@
         if (saw429) {
           failureLevel.delete(key);
           const abortUntil = now() + abortCooldownMs;
-          applyRateCooldown(key, abortUntil);
+          setCooldownUntil(key, abortUntil);
           log("aborted-after-429", {
             surface,
             cooldownMs: abortCooldownMs
@@ -573,29 +658,32 @@
       }
       throw error;
     } finally {
+      hideGuardNotice();
       channel.postMessage({ type: "peer-finish", key });
     }
   }
 
-  const findPending = (key, signal) => {
-    const group = pending.get(key);
-    if (!group) return null;
-    for (const entry of group) {
-      if (entry.signal === signal) return entry;
+  const addSubscriber = (group, signal, resolve, reject) => {
+    const sub = { signal, resolve, reject };
+    if (signal) {
+      sub.onAbort = () => {
+        group.subscribers.delete(sub);
+        if (signal.removeEventListener) {
+          signal.removeEventListener("abort", sub.onAbort);
+        }
+        reject(abortError(signal));
+        if (group.subscribers.size === 0) {
+          group.masterController.abort(abortError(signal));
+        }
+      };
+      signal.addEventListener("abort", sub.onAbort, { once: true });
     }
-    return null;
-  };
-
-  const removePending = (key, entry) => {
-    const group = pending.get(key);
-    if (!group) return;
-    group.delete(entry);
-    if (group.size === 0) pending.delete(key);
+    group.subscribers.add(sub);
   };
 
   const pendingCount = () => {
     let count = 0;
-    for (const group of pending.values()) count += group.size;
+    for (const group of pending.values()) count += group.subscribers.size;
     return count;
   };
 
@@ -615,7 +703,7 @@
     );
   };
 
-  window.fetch = function(input, init) {
+  const guardedFetchHandler = function(input, init) {
     const protectedRequest = protectedInfo(input, init);
     if (disabled()) return nativeFetch(input, init);
 
@@ -654,34 +742,70 @@
     const { requestKey, rateKey, surface } = protectedRequest;
     metrics.protectedCalls++;
     const signal = requestSignal(input, init);
-    const existing = findPending(requestKey, signal);
-    if (existing) {
-      metrics.dedupeHits++;
-      log("dedupe-hit", { surface });
-      return existing.task.then(response => response.clone());
-    }
 
-    if (pending.has(requestKey)) {
-      metrics.dedupeSignalMismatches++;
-      log("dedupe-skip-signal", { surface });
+    if (signal && signal.aborted) {
+      return Promise.reject(abortError(signal));
     }
-
-    const entry = { signal, task: null };
-    const task = runSerialized(
-      rateKey,
-      signal,
-      () => guardedFetch(input, init, rateKey, protectedRequest)
-    ).finally(() => removePending(requestKey, entry));
-    entry.task = task;
 
     let group = pending.get(requestKey);
-    if (!group) {
-      group = new Set();
-      pending.set(requestKey, group);
+    if (group) {
+      metrics.dedupeHits++;
+      log("dedupe-hit", { surface });
+      return new Promise((resolve, reject) => {
+        addSubscriber(group, signal, resolve, reject);
+      });
     }
-    group.add(entry);
-    return task.then(response => response.clone());
+
+    const masterController = new AbortController();
+    const subscribers = new Set();
+    group = {
+      masterController,
+      subscribers,
+      task: null
+    };
+    pending.set(requestKey, group);
+
+    const masterSignal = masterController.signal;
+    const task = runSerialized(
+      rateKey,
+      masterSignal,
+      () => guardedFetch(input, init, rateKey, protectedRequest, masterSignal)
+    );
+    group.task = task;
+
+    task.then(
+      response => {
+        pending.delete(requestKey);
+        const list = Array.from(subscribers);
+        for (const sub of list) {
+          if (sub.signal && sub.onAbort) {
+            sub.signal.removeEventListener("abort", sub.onAbort);
+          }
+          try {
+            sub.resolve(response.clone());
+          } catch (e) {
+            sub.reject(e);
+          }
+        }
+      },
+      error => {
+        pending.delete(requestKey);
+        const list = Array.from(subscribers);
+        for (const sub of list) {
+          if (sub.signal && sub.onAbort) {
+            sub.signal.removeEventListener("abort", sub.onAbort);
+          }
+          sub.reject(error);
+        }
+      }
+    );
+
+    return new Promise((resolve, reject) => {
+      addSubscriber(group, signal, resolve, reject);
+    });
   };
+
+  window.fetch = guardedFetchHandler;
 
   const activeCooldownCount = () => {
     const current = now();
