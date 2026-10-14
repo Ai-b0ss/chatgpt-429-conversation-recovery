@@ -877,6 +877,20 @@
         });
 
         if (retryResponse.status === 404) continue;
+        if (retryResponse.status === 429) {
+          const raw = retryResponse.headers?.get ? retryResponse.headers.get("retry-after") : null;
+          const waitSec = Number(raw);
+          const waitMs = (Number.isFinite(waitSec) && waitSec > 0 ? Math.min(waitSec * 1000, 3000) : 1000);
+          emit("resume-recovery-429-wait", { waitMs, attempt: attemptsMade });
+          await sleep(waitMs, retryRequest.signal);
+          try {
+            const reRequest = new Request(retryRequest, {
+              body: JSON.stringify({ ...body, offset: nextOffset })
+            });
+            retryResponse = await originalFetch(reRequest);
+          } catch {}
+          if (retryResponse.status === 404) continue;
+        }
         if (!retryResponse.ok) {
           emit("resume-recovery-stopped", {
             attempt: attemptsMade,

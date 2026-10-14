@@ -72,6 +72,15 @@ class H(BaseHTTPRequestHandler):
                 if n==1:
                     return self.sendb(429,'{"detail":"Too many requests"}')
                 return self.sendb(200,json.dumps({"ok":True,"id":ident,"n":n}))
+            if ident=="transient-504":
+                if n==1:
+                    return self.sendb(429,'{"detail":"Too many requests"}')
+                if n==2:
+                    return self.sendb(504,'{"detail":"Gateway Timeout"}')
+                return self.sendb(200,json.dumps({"ok":True,"id":ident,"recovered":True}))
+            if ident=="multiplex-abort":
+                time.sleep(0.4)
+                return self.sendb(200,json.dumps({"ok":True,"id":ident,"n":n}))
             if ident=="global-b":
                 return self.sendb(200,json.dumps({"ok":True,"id":ident,"n":n}))
             if ident=="always-429":
@@ -114,4 +123,6 @@ class H(BaseHTTPRequestHandler):
 
 if __name__=="__main__":
     print(f"LISTENING {PORT}",flush=True)
+    ThreadingHTTPServer.allow_reuse_address = True
+    ThreadingHTTPServer.daemon_threads = True
     ThreadingHTTPServer(("127.0.0.1",PORT),H).serve_forever()
