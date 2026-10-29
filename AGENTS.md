@@ -5,11 +5,10 @@ ChatGPT Conversation Availability Guard: a Chrome extension (`extension/`) that 
 ## Branches
 `main` is the stable/integration line. Other branches are focused experiments or maintenance lines. Do not mix `429-only`, resume-404 and stream-resume behavior without diffing the branches first; `429-only` is intentionally narrow.
 
-## Non-negotiable behavior boundary
-- Do not turn the extension into a rate-limit bypass.
-- Automatic replay is limited to requests the project has proven safe and idempotent. Never replay POST actions just because a 429 occurred.
-- Keep privacy filtering of diagnostics.
-- Keep retry and cooldown behavior bounded.
+## Design invariants
+- Auto-retry only idempotent reads (GET). Replaying a POST resends the user's message and triggers a second generation.
+- Retries stay bounded and honor `Retry-After`; unbounded retry on 429 only adds load and risks account penalties.
+- Diagnostics must not contain conversation text or other personal data.
 
 ## Architecture map
 | File | Role |
